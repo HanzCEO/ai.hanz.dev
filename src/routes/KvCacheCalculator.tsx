@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router'
 
-import { computeKvCache, type ComputeResult, type Provider } from '@/lib/kvcache'
+import { computeKvCache, detectArchitecture, unwrapConfig, type ComputeResult, type Provider } from '@/lib/kvcache'
 import CalculatorForm from '@/tools/kv-cache-calculator/CalculatorForm'
 import CalculatorResults from '@/tools/kv-cache-calculator/CalculatorResults'
+import { defaultDtypesForFamily } from '@/tools/kv-cache-calculator/defaultDtypes'
 import {
   parsePositiveInteger,
   useCalculatorState,
@@ -22,6 +23,12 @@ export default function KvCacheCalculator() {
   const sequenceError = sequenceCount === null ? 'Enter a whole number, 1 or more.' : null
 
   const config = configState.status === 'ready' ? configState.config : null
+
+  const detectedFamily = useMemo(() => {
+    if (!config) return null
+    const { inner, outer } = unwrapConfig(config)
+    return detectArchitecture(inner, outer).family
+  }, [config])
 
   const { result, computeError } = useMemo((): {
     result: ComputeResult | null
@@ -65,6 +72,22 @@ export default function KvCacheCalculator() {
       update({ contextLength: String(max) })
     }
   }, [configState.status, result, seeded, update])
+
+  // Open a newly selected model on the cache dtype it actually ships with. The
+  // ref keys on the selection, so a manual dtype change is never undone while
+  // the same model stays selected, and a shared link that names a dtype keeps
+  // its own choice.
+  const dtypeSeededFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!detectedFamily) return
+    const selection = `${inputs.provider}:${inputs.modelId}`
+    if (dtypeSeededFor.current === selection) return
+    dtypeSeededFor.current = selection
+    if (seeded.current.dtype) return
+
+    const next = defaultDtypesForFamily(detectedFamily)
+    update({ kvCacheDtype: next.kvCacheDtype, indexerDtype: next.indexerDtype })
+  }, [detectedFamily, inputs.provider, inputs.modelId, seeded, update])
 
   const onSwitchProvider = useCallback(
     (provider: Provider) => update({ provider }),

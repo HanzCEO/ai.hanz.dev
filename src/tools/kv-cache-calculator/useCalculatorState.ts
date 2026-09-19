@@ -56,7 +56,7 @@ export function useCalculatorState() {
   const mounted = useRef(false)
   // Records which fields the URL supplied, so the page does not overwrite a
   // shared link with its own idea of a sensible default.
-  const seeded = useRef({ context: false, model: false })
+  const seeded = useRef({ context: false, model: false, dtype: false })
 
   useEffect(() => {
     if (mounted.current) return
@@ -69,7 +69,11 @@ export function useCalculatorState() {
     const kvDtype = searchParams.get('kv_dtype')
     const indexerDtype = searchParams.get('indexer_dtype')
 
-    seeded.current = { context: context !== null, model: model !== null && model.trim() !== '' }
+    seeded.current = {
+      context: context !== null,
+      model: model !== null && model.trim() !== '',
+      dtype: isDtype(kvDtype) || isDtype(indexerDtype),
+    }
 
     setInputs((current) => ({
       ...current,
