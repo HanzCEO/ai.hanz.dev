@@ -6,6 +6,7 @@ import '@/index.css'
 import '@/styles/main.scss'
 
 import App from '@/App'
+import { PRERENDER_ATTR, prerenderMarkerFor } from '@/lib/seo'
 
 const rootElement = document.getElementById('root')
 
@@ -21,10 +22,25 @@ const tree = (
   </StrictMode>
 )
 
-// Prerendered routes ship with markup already in #root, so hydrate those.
-// In dev the container is empty and we mount from scratch.
-if (rootElement.hasChildNodes()) {
+/**
+ * Only hydrate markup that belongs to the route being rendered.
+ *
+ * The prerender step stamps each document with the route it rendered. If the
+ * server hands back a different document, for example a host that falls back to
+ * index.html or 404.html for a path it cannot resolve, the markup would
+ * disagree with the client and React would report a hydration error. Comparing
+ * the stamp first turns that into a clean client render instead.
+ */
+const prerenderedRoute = rootElement.getAttribute(PRERENDER_ATTR)
+const expectedRoute = prerenderMarkerFor(window.location.pathname)
+
+const canHydrate =
+  rootElement.hasChildNodes() && prerenderedRoute !== null && prerenderedRoute === expectedRoute
+
+if (canHydrate) {
   hydrateRoot(rootElement, tree)
 } else {
+  // Discard markup that belongs to another route before mounting.
+  rootElement.replaceChildren()
   createRoot(rootElement).render(tree)
 }

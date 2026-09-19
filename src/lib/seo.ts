@@ -14,6 +14,8 @@ export interface RouteMeta {
   path: string
   title: string
   description: string
+  /** Set on pages that must not be indexed, such as the not found page. */
+  noindex?: boolean
 }
 
 export const ROUTE_META: RouteMeta[] = [
@@ -31,25 +33,54 @@ export const ROUTE_META: RouteMeta[] = [
   },
 ]
 
-const NOT_FOUND_META: RouteMeta = {
-  path: '/404',
-  title: 'Page not found | ai.hanz.dev',
-  description: 'That page does not exist. Head back to the tool list.',
-}
+/** Path the not found page is rendered and marked under. */
+export const NOT_FOUND_PATH = '/404'
+
+/**
+ * Marker written into the prerendered HTML for the not found page. That file is
+ * served for every unknown path, so it cannot claim a specific route.
+ */
+export const PRERENDER_WILDCARD = '*'
+
+/** Attribute the prerender step writes onto #root to record which route it rendered. */
+export const PRERENDER_ATTR = 'data-prerender-route'
 
 /** Routes that get their own prerendered HTML file. */
 export const PRERENDER_ROUTES: string[] = ROUTE_META.map((meta) => meta.path)
 
-function normalize(pathname: string): string {
-  if (pathname.length > 1) return pathname.replace(/\/+$/, '')
-  return pathname
+/** Trailing slashes are not significant, so /a and /a/ are the same route. */
+export function normalizePath(pathname: string): string {
+  const withoutQuery = pathname.split('?')[0].split('#')[0]
+  if (withoutQuery.length > 1) return withoutQuery.replace(/\/+$/, '')
+  return withoutQuery
+}
+
+/** Returns the matching route, or null when nothing matches. */
+export function matchRoute(pathname: string): RouteMeta | null {
+  const path = normalizePath(pathname)
+  return ROUTE_META.find((meta) => meta.path === path) ?? null
+}
+
+export function getNotFoundMeta(): RouteMeta {
+  return {
+    path: NOT_FOUND_PATH,
+    title: 'Page not found | ai.hanz.dev',
+    description: 'That page does not exist. Head back to the tool list.',
+    noindex: true,
+  }
 }
 
 export function getRouteMeta(pathname: string): RouteMeta {
-  const path = normalize(pathname)
-  const match = ROUTE_META.find((meta) => meta.path === path)
-  if (match) return match
-  return { ...NOT_FOUND_META, path: path === '' ? '/404' : path }
+  return matchRoute(pathname) ?? getNotFoundMeta()
+}
+
+/**
+ * The marker a correctly prerendered document would carry for this URL. The
+ * client compares it against what the server actually sent, so it only hydrates
+ * markup that belongs to the route it is rendering.
+ */
+export function prerenderMarkerFor(pathname: string): string {
+  return matchRoute(pathname) ? normalizePath(pathname) : PRERENDER_WILDCARD
 }
 
 export function canonicalUrl(path: string): string {
@@ -74,20 +105,34 @@ function escapeHtml(value: string): string {
 }
 
 export function headTags(meta: RouteMeta): HeadTag[] {
-  const url = canonicalUrl(meta.path)
-  return [
+  const tags: HeadTag[] = [
     { tag: 'title', attrs: {}, text: meta.title },
     { tag: 'meta', attrs: { name: 'description', content: meta.description } },
-    { tag: 'link', attrs: { rel: 'canonical', href: url } },
-    { tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
-    { tag: 'meta', attrs: { property: 'og:site_name', content: SITE_NAME } },
-    { tag: 'meta', attrs: { property: 'og:title', content: meta.title } },
-    { tag: 'meta', attrs: { property: 'og:description', content: meta.description } },
-    { tag: 'meta', attrs: { property: 'og:url', content: url } },
+  ]
+
+  // A shared not found document is served for arbitrary URLs, so it must not
+  // claim a canonical URL, and it must not be indexed.
+  if (meta.noindex) {
+    tags.push({ tag: 'meta', attrs: { name: 'robots', content: 'noindex, follow' } })
+  } else {
+    const url = canonicalUrl(meta.path)
+    tags.push(
+      { tag: 'link', attrs: { rel: 'canonical', href: url } },
+      { tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
+      { tag: 'meta', attrs: { property: 'og:site_name', content: SITE_NAME } },
+      { tag: 'meta', attrs: { property: 'og:title', content: meta.title } },
+      { tag: 'meta', attrs: { property: 'og:description', content: meta.description } },
+      { tag: 'meta', attrs: { property: 'og:url', content: url } },
+    )
+  }
+
+  tags.push(
     { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary' } },
     { tag: 'meta', attrs: { name: 'twitter:title', content: meta.title } },
     { tag: 'meta', attrs: { name: 'twitter:description', content: meta.description } },
-  ]
+  )
+
+  return tags
 }
 
 /** Serialize head tags into HTML for the prerender step. */

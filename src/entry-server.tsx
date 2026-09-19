@@ -3,7 +3,15 @@ import { renderToString } from 'react-dom/server'
 import { StaticRouter } from 'react-router'
 
 import App from '@/App'
-import { PRERENDER_ROUTES, getRouteMeta, renderHeadTags } from '@/lib/seo'
+import {
+  NOT_FOUND_PATH,
+  PRERENDER_ATTR,
+  PRERENDER_ROUTES,
+  PRERENDER_WILDCARD,
+  getNotFoundMeta,
+  getRouteMeta,
+  renderHeadTags,
+} from '@/lib/seo'
 
 export interface RenderedRoute {
   html: string
@@ -23,4 +31,13 @@ export function render(url: string): RenderedRoute {
   return { html, head: renderHeadTags(getRouteMeta(url)) }
 }
 
-export { PRERENDER_ROUTES, getRouteMeta, renderHeadTags }
+// Re-exported so the prerender script reads route knowledge from one place.
+export {
+  NOT_FOUND_PATH,
+  PRERENDER_ATTR,
+  PRERENDER_ROUTES,
+  PRERENDER_WILDCARD,
+  getNotFoundMeta,
+  getRouteMeta,
+  renderHeadTags,
+}
