@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import BreakdownPanel from '@/tools/kv-cache-calculator/BreakdownPanel'
-import type { ModelConfigState } from '@/tools/kv-cache-calculator/useModelConfig'
+import type { ModelConfigState } from '@/lib/use-model-config'
 
 function SupportButton() {
   return (

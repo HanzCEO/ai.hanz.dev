@@ -9,7 +9,7 @@ import {
   parsePositiveInteger,
   useCalculatorState,
 } from '@/tools/kv-cache-calculator/useCalculatorState'
-import { useModelConfig } from '@/tools/kv-cache-calculator/useModelConfig'
+import { useModelConfig } from '@/lib/use-model-config'
 
 export default function KvCacheCalculator() {
   const { inputs, update, seeded } = useCalculatorState()

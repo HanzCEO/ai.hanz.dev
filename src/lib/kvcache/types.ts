@@ -14,8 +14,12 @@ export type SupportLevel = 'supported' | 'untested' | 'unsupported'
 
 export type ArchitectureFamily = 'gqa' | 'mla' | 'hybrid_linear' | 'dsv4' | 'dsv41' | 'unknown'
 
-/** A model config as returned by the hub. Fields are read defensively. */
-export type RawConfig = Record<string, unknown>
+/**
+ * A model config as returned by the hub. Fields are read defensively. The type
+ * lives with the shared readers so the KV cache and REAP engines read configs
+ * the same way.
+ */
+export type { RawConfig } from '../model-config'
 
 export interface DtypeSpec {
   id: DtypeId

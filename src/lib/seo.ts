@@ -1,3 +1,5 @@
+import { REAP_FAQ } from './reap/faq'
+
 /**
  * Route metadata is the single source of truth for page titles, descriptions,
  * canonical URLs, and the prerender route list. The prerender script and the
@@ -16,20 +18,46 @@ export interface RouteMeta {
   description: string
   /** Set on pages that must not be indexed, such as the not found page. */
   noindex?: boolean
+  /**
+   * Structured data written into a JSON-LD script. Built with faqJsonLd,
+   * softwareApplicationJsonLd, or jsonLdGraph, so a page can describe itself to
+   * a search engine in a form it can read directly.
+   */
+  jsonLd?: Record<string, unknown>
 }
+
+const REAP_PATH = '/tools/reap-cost-calculator'
+const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
+const REAP_DESCRIPTION =
+  'REAP duration calculator for mixture of experts models. Estimate how long REAP expert pruning takes, check whether one expert block fits your GPU, and see how much smaller the pruned model gets.'
 
 export const ROUTE_META: RouteMeta[] = [
   {
     path: '/',
     title: 'ai.hanz.dev | Tools for AI developers',
     description:
-      'Tools for AI developers. Start with the KV cache calculator, which sizes a cache from the model config.',
+      'Tools for AI developers. Size a KV cache from a model config, or estimate the cost of pruning a mixture of experts with REAP.',
   },
   {
     path: '/tools/kv-cache-calculator',
     title: 'KV Cache Calculator | ai.hanz.dev',
     description:
       'Estimate KV cache size for any model on HuggingFace or ModelScope. Set context length, sequence count, and cache dtype.',
+  },
+  {
+    path: REAP_PATH,
+    title: REAP_TITLE,
+    description: REAP_DESCRIPTION,
+    // The visible questions and the markup a search engine reads come from one
+    // list, so they cannot drift apart.
+    jsonLd: jsonLdGraph(
+      softwareApplicationJsonLd({
+        path: REAP_PATH,
+        title: REAP_TITLE,
+        description: REAP_DESCRIPTION,
+      }),
+      faqJsonLd(REAP_FAQ),
+    ),
   },
 ]
 
@@ -88,7 +116,7 @@ export function canonicalUrl(path: string): string {
 }
 
 export interface HeadTag {
-  tag: 'title' | 'meta' | 'link'
+  tag: 'title' | 'meta' | 'link' | 'script'
   attrs: Record<string, string>
   text?: string
 }
@@ -132,7 +160,27 @@ export function headTags(meta: RouteMeta): HeadTag[] {
     { tag: 'meta', attrs: { name: 'twitter:description', content: meta.description } },
   )
 
+  if (meta.jsonLd) {
+    tags.push({
+      tag: 'script',
+      attrs: { type: 'application/ld+json' },
+      text: JSON.stringify(meta.jsonLd),
+    })
+  }
+
   return tags
+}
+
+/**
+ * Escapes a JSON body so it cannot close the script element it sits in.
+ *
+ * A payload containing the literal text of a closing script tag would end the
+ * element early and turn the rest of the document into markup. Replacing the
+ * opening angle bracket with its unicode escape is valid inside a JSON string
+ * and leaves the parsed value unchanged.
+ */
+function escapeJsonForScript(json: string): string {
+  return json.replace(/</g, '\\u003c')
 }
 
 /** Serialize head tags into HTML for the prerender step. */
@@ -144,6 +192,9 @@ export function renderHeadTags(meta: RouteMeta): string {
         .join('')
       if (tag.tag === 'title') {
         return `<title${SEO_MARKER}>${escapeHtml(tag.text ?? '')}</title>`
+      }
+      if (tag.tag === 'script') {
+        return `<script${SEO_MARKER}${attrs}>${escapeJsonForScript(tag.text ?? '')}</script>`
       }
       return `<${tag.tag}${SEO_MARKER}${attrs} />`
     })
@@ -167,8 +218,66 @@ export function applyHead(meta: RouteMeta): void {
     for (const [key, value] of Object.entries(tag.attrs)) {
       element.setAttribute(key, value)
     }
+    // A JSON-LD body is assigned as text content, never parsed as markup.
     if (tag.text !== undefined) element.textContent = tag.text
     element.setAttribute(SEO_ATTR, '')
     document.head.appendChild(element)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Structured data
+// ---------------------------------------------------------------------------
+
+export interface FaqItem {
+  question: string
+  answer: string
+}
+
+/**
+ * A FAQPage node. Search engines read these question and answer pairs directly,
+ * and they are the shape an AI overview lifts its answer from.
+ */
+export function faqJsonLd(items: FaqItem[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: { '@type': 'Answer', text: item.answer },
+    })),
+  }
+}
+
+/** A SoftwareApplication node describing the tool on a page. */
+export function softwareApplicationJsonLd(meta: RouteMeta): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: meta.title,
+    description: meta.description,
+    url: canonicalUrl(meta.path),
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Any',
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
+  }
+}
+
+/**
+ * Combines several structured data nodes into one document. A single script can
+ * carry a graph, so a page needs only one JSON-LD block. The per node context
+ * is dropped because the graph declares it once.
+ */
+export function jsonLdGraph(...nodes: Array<Record<string, unknown>>): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': nodes.map((node) => {
+      const copy = { ...node }
+      delete copy['@context']
+      return copy
+    }),
   }
 }

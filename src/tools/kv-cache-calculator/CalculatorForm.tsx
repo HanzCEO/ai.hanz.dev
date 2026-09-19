@@ -5,7 +5,7 @@ import { PROVIDER_LIST, type ComputeResult, type Provider } from '@/lib/kvcache'
 import { Input } from '@/components/ui/input'
 import DtypeSelect from '@/tools/kv-cache-calculator/DtypeSelect'
 import { MODEL_PRESETS } from '@/tools/kv-cache-calculator/presets'
-import type { ModelConfigState } from '@/tools/kv-cache-calculator/useModelConfig'
+import type { ModelConfigState } from '@/lib/use-model-config'
 import type { CalculatorInputs } from '@/tools/kv-cache-calculator/useCalculatorState'
 
 const PROVIDER_ORDER: Provider[] = ['huggingface', 'modelscope']

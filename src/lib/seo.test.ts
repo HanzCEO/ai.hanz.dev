@@ -5,13 +5,16 @@ import {
   PRERENDER_ROUTES,
   PRERENDER_WILDCARD,
   SITE_ORIGIN,
+  faqJsonLd,
   getNotFoundMeta,
   getRouteMeta,
   headTags,
+  jsonLdGraph,
   matchRoute,
   normalizePath,
   prerenderMarkerFor,
   renderHeadTags,
+  softwareApplicationJsonLd,
 } from './seo'
 
 describe('normalizePath', () => {
@@ -132,5 +135,124 @@ describe('renderHeadTags', () => {
     expect(html).toContain('&amp;')
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('&quot;')
+  })
+})
+
+describe('JSON-LD structured data', () => {
+  const withJsonLd = {
+    path: '/tools/example',
+    title: 'Example | ai.hanz.dev',
+    description: 'An example page.',
+    jsonLd: { '@context': 'https://schema.org', '@type': 'Thing', name: 'Example' },
+  }
+
+  it('emits no script tag on a page without structured data', () => {
+    const tags = headTags(getRouteMeta('/'))
+    expect(tags.find((tag) => tag.tag === 'script')).toBeUndefined()
+    expect(renderHeadTags(getRouteMeta('/'))).not.toContain('application/ld+json')
+  })
+
+  it('emits a script tag carrying the payload when the route has one', () => {
+    const tags = headTags(withJsonLd)
+    const script = tags.find((tag) => tag.tag === 'script')
+    expect(script?.attrs.type).toBe('application/ld+json')
+    expect(script?.text).toContain('"@type":"Thing"')
+
+    const html = renderHeadTags(withJsonLd)
+    expect(html).toContain('type="application/ld+json"')
+    expect(html).toContain('data-seo')
+  })
+
+  it('keeps the payload parseable as JSON', () => {
+    const html = renderHeadTags(withJsonLd)
+    const match = html.match(/<script[^>]*>([\s\S]*?)<\/script>/)
+    expect(match).not.toBeNull()
+    expect(JSON.parse(match?.[1] ?? '')).toEqual(withJsonLd.jsonLd)
+  })
+
+  it('escapes a payload that would otherwise close the script element', () => {
+    const hostile = {
+      '@type': 'Thing',
+      name: '</script><img src=x onerror="alert(1)">',
+    }
+    const html = renderHeadTags({ ...withJsonLd, jsonLd: hostile })
+
+    // The literal closing sequence never reaches the document.
+    expect(html).not.toContain('</script><img')
+    expect(html).toContain('\\u003c/script')
+
+    // Escaping is transparent: the parsed value is unchanged.
+    const match = html.match(/<script[^>]*>([\s\S]*?)<\/script>/)
+    expect(JSON.parse(match?.[1] ?? '')).toEqual(hostile)
+  })
+})
+
+describe('faqJsonLd', () => {
+  const items = [
+    { question: 'How long does REAP take?', answer: 'It depends on the token count.' },
+    { question: 'Can I prune on one GPU?', answer: 'Yes, with the layer-wise observer.' },
+  ]
+
+  it('produces a FAQPage with one question per item', () => {
+    const node = faqJsonLd(items)
+    expect(node['@type']).toBe('FAQPage')
+    expect(node['@context']).toBe('https://schema.org')
+
+    const entities = node.mainEntity as Array<Record<string, unknown>>
+    expect(entities).toHaveLength(2)
+    expect(entities[0].name).toBe('How long does REAP take?')
+    expect(entities[0]['@type']).toBe('Question')
+  })
+
+  it('gives every question an accepted answer', () => {
+    const entities = faqJsonLd(items).mainEntity as Array<Record<string, unknown>>
+    for (const entity of entities) {
+      const answer = entity.acceptedAnswer as Record<string, unknown>
+      expect(answer['@type']).toBe('Answer')
+      expect(String(answer.text).trim()).not.toBe('')
+    }
+  })
+})
+
+describe('softwareApplicationJsonLd', () => {
+  it('describes the tool with its canonical URL', () => {
+    const node = softwareApplicationJsonLd(getRouteMeta('/tools/kv-cache-calculator'))
+    expect(node['@type']).toBe('SoftwareApplication')
+    expect(node.url).toBe(`${SITE_ORIGIN}/tools/kv-cache-calculator`)
+    expect(node.isAccessibleForFree).toBe(true)
+    expect(node.applicationCategory).toBe('DeveloperApplication')
+  })
+})
+
+describe('jsonLdGraph', () => {
+  it('combines nodes under one context', () => {
+    const meta = getRouteMeta('/tools/kv-cache-calculator')
+    const graph = jsonLdGraph(
+      softwareApplicationJsonLd(meta),
+      faqJsonLd([{ question: 'Q', answer: 'A' }]),
+    )
+
+    expect(graph['@context']).toBe('https://schema.org')
+    const nodes = graph['@graph'] as Array<Record<string, unknown>>
+    expect(nodes).toHaveLength(2)
+    // The shared context is declared once, on the graph itself.
+    for (const node of nodes) {
+      expect(node['@context']).toBeUndefined()
+    }
+    expect(nodes.map((node) => node['@type'])).toEqual(['SoftwareApplication', 'FAQPage'])
+  })
+
+  it('round-trips through a script tag and parses back', () => {
+    const meta = getRouteMeta('/tools/kv-cache-calculator')
+    const jsonLd = jsonLdGraph(
+      softwareApplicationJsonLd(meta),
+      faqJsonLd([{ question: 'Q', answer: 'A' }]),
+    )
+    const html = renderHeadTags({ ...meta, jsonLd })
+    const match = html.match(/<script[^>]*>([\s\S]*?)<\/script>/)
+    const parsed = JSON.parse(match?.[1] ?? '') as Record<string, unknown>
+    const types = (parsed['@graph'] as Array<Record<string, unknown>>).map((n) => n['@type'])
+    expect(types).toContain('FAQPage')
+    expect(types).toContain('SoftwareApplication')
   })
 })

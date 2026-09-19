@@ -1,3 +1,13 @@
+import {
+  dtypeNameToBytes,
+  readBoolean,
+  readNumber,
+  readNumberArray,
+  readObject,
+  readString,
+  readStringArray,
+  unwrapConfig,
+} from '../model-config'
 import { DEFAULT_DTYPE, DTYPES, dtypeBytes, dtypeSupport, isDtypeId } from './dtypes'
 import {
   KvCacheInputError,
@@ -12,80 +22,9 @@ import {
   type RawConfig,
 } from './types'
 
-// ---------------------------------------------------------------------------
-// Config field readers. Configs in the wild omit fields freely, so everything
-// is read defensively and absence is handled rather than assumed away.
-// ---------------------------------------------------------------------------
-
-const NESTED_KEYS = ['text_config', 'llm_config', 'language_config'] as const
-
-function readNumber(config: RawConfig, key: string): number | undefined {
-  const value = config[key]
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
-    return Number(value)
-  }
-  return undefined
-}
-
-function readNumberArray(config: RawConfig, key: string): number[] | undefined {
-  const value = config[key]
-  if (Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'number')) {
-    return value as number[]
-  }
-  return undefined
-}
-
-function readStringArray(config: RawConfig, key: string): string[] | undefined {
-  const value = config[key]
-  if (Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string')) {
-    return value as string[]
-  }
-  return undefined
-}
-
-function readString(config: RawConfig, key: string): string | undefined {
-  const value = config[key]
-  return typeof value === 'string' ? value : undefined
-}
-
-function readBoolean(config: RawConfig, key: string): boolean | undefined {
-  const value = config[key]
-  return typeof value === 'boolean' ? value : undefined
-}
-
-function readObject(config: RawConfig, key: string): RawConfig | undefined {
-  const value = config[key]
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value as RawConfig
-  return undefined
-}
-
-/**
- * Multimodal configs (DeepSeek-V4.1-Flash, Qwen3.5, Gemma 4) keep the language
- * model fields under a nested key. Returns the inner config plus the outer one,
- * since a few fields such as quantization_config only live outside.
- */
-export function unwrapConfig(raw: RawConfig): { inner: RawConfig; outer: RawConfig } {
-  for (const key of NESTED_KEYS) {
-    const nested = raw[key]
-    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
-      return { inner: nested as RawConfig, outer: raw }
-    }
-  }
-  return { inner: raw, outer: raw }
-}
-
-/** Converts a torch dtype name into bytes per element. */
-function dtypeNameToBytes(name: string | undefined): number | undefined {
-  if (!name) return undefined
-  const normalized = name.toLowerCase()
-  if (normalized.includes('float32') || normalized === 'fp32') return 4
-  if (normalized.includes('float16') || normalized === 'fp16' || normalized === 'half') return 2
-  if (normalized.includes('bfloat16') || normalized === 'bf16') return 2
-  if (normalized.includes('float8') || normalized === 'fp8') return 1
-  if (normalized.includes('int8')) return 1
-  return undefined
-}
+// Config field readers live in ../model-config so the REAP engine can share
+// them. unwrapConfig is re-exported below to keep this module's public surface.
+export { unwrapConfig }
 
 // ---------------------------------------------------------------------------
 // Architecture detection

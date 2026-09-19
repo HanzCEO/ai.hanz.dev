@@ -1,4 +1,4 @@
-import { Calculator, type LucideIcon } from 'lucide-react'
+import { Calculator, Scissors, type LucideIcon } from 'lucide-react'
 
 export type ToolStatus = 'ready' | 'planned'
 
@@ -22,6 +22,14 @@ export const tools: Tool[] = [
     description:
       'Sizes the cache for models using grouped query attention, MLA, hybrid linear attention, or sparse attention.',
     icon: Calculator,
+    status: 'ready',
+  },
+  {
+    slug: 'reap-cost-calculator',
+    name: 'REAP Cost Calculator',
+    description:
+      'Estimates how long REAP expert pruning takes for a mixture of experts model, whether one expert block fits your GPU, and how much smaller the pruned model gets.',
+    icon: Scissors,
     status: 'ready',
   },
 ]

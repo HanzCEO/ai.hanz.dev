@@ -8,6 +8,11 @@ import {
   type RawConfig,
 } from '@/lib/kvcache'
 
+/**
+ * Fetches and caches a model config from a hub. Shared by every tool that reads
+ * a config from HuggingFace or ModelScope.
+ */
+
 export type ConfigStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ModelConfigState {

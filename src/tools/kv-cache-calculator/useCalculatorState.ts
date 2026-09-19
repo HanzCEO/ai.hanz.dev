@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useMemo } from 'react'
 
 import { DTYPES, type DtypeId, type Provider } from '@/lib/kvcache'
+import {
+  digitsOnly,
+  nonEmptyText,
+  useUrlSyncedState,
+  type UrlSchema,
+} from '@/lib/url-state'
 
 export interface CalculatorInputs {
   provider: Provider
@@ -19,99 +24,70 @@ export const DEFAULT_MODEL_ID = 'Qwen/Qwen3-8B'
 export const DEFAULT_CONTEXT_LENGTH = '32768'
 export const DEFAULT_SEQUENCE_COUNT = '1'
 
-const DEFAULTS: CalculatorInputs = {
-  provider: 'huggingface',
-  modelId: DEFAULT_MODEL_ID,
-  contextLength: DEFAULT_CONTEXT_LENGTH,
-  sequenceCount: DEFAULT_SEQUENCE_COUNT,
-  kvCacheDtype: 'BF16',
-  indexerDtype: 'BF16',
-  token: '',
-}
-
-const DTYPE_IDS = new Set<string>(DTYPES.map((dtype) => dtype.id))
+const DTYPE_IDS = DTYPES.map((dtype) => dtype.id)
 
 function isDtype(value: string | null): value is DtypeId {
-  return value !== null && DTYPE_IDS.has(value)
+  return value !== null && DTYPE_IDS.includes(value as DtypeId)
 }
 
 function isProvider(value: string | null): value is Provider {
   return value === 'huggingface' || value === 'modelscope'
 }
 
-function digitsOnly(value: string | null): string | null {
-  if (value === null) return null
-  const trimmed = value.trim()
-  return /^\d+$/.test(trimmed) ? trimmed : null
-}
-
 /**
  * Inputs live in the query string so a calculation can be shared or reloaded.
- * The URL is only read after mount, which keeps the first client render
- * identical to the prerendered HTML and avoids a hydration mismatch.
+ * Declared once at module scope so the hook can capture it in a ref, and
+ * exported so the URL contract can be tested without rendering the page.
  */
+export const CALCULATOR_SCHEMA: UrlSchema<CalculatorInputs> = {
+  provider: {
+    param: 'provider',
+    default: 'huggingface',
+    parse: (raw) => (isProvider(raw) ? raw : null),
+  },
+  modelId: { param: 'model', default: DEFAULT_MODEL_ID, parse: nonEmptyText },
+  contextLength: { param: 'context', default: DEFAULT_CONTEXT_LENGTH, parse: digitsOnly },
+  sequenceCount: { param: 'sequences', default: DEFAULT_SEQUENCE_COUNT, parse: digitsOnly },
+  kvCacheDtype: {
+    param: 'kv_dtype',
+    default: 'BF16',
+    parse: (raw) => (isDtype(raw) ? raw : null),
+  },
+  indexerDtype: {
+    param: 'indexer_dtype',
+    default: 'BF16',
+    parse: (raw) => (isDtype(raw) ? raw : null),
+  },
+  // The token is a secret. It is held in memory and never leaves the page.
+  token: { param: 'token', default: '', parse: () => null, omit: true },
+}
+
+/** Which fields the URL supplied, under the names this page has always used. */
+export interface CalculatorSeeded {
+  context: boolean
+  model: boolean
+  dtype: boolean
+}
+
 export function useCalculatorState() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [inputs, setInputs] = useState<CalculatorInputs>(DEFAULTS)
-  const mounted = useRef(false)
-  // Records which fields the URL supplied, so the page does not overwrite a
-  // shared link with its own idea of a sensible default.
-  const seeded = useRef({ context: false, model: false, dtype: false })
+  const { values: inputs, update, serialized, seeded: fieldSeeded } =
+    useUrlSyncedState<CalculatorInputs>(CALCULATOR_SCHEMA)
 
-  useEffect(() => {
-    if (mounted.current) return
-    mounted.current = true
-
-    const provider = searchParams.get('provider')
-    const model = searchParams.get('model')
-    const context = digitsOnly(searchParams.get('context'))
-    const sequences = digitsOnly(searchParams.get('sequences'))
-    const kvDtype = searchParams.get('kv_dtype')
-    const indexerDtype = searchParams.get('indexer_dtype')
-
-    seeded.current = {
-      context: context !== null,
-      model: model !== null && model.trim() !== '',
-      dtype: isDtype(kvDtype) || isDtype(indexerDtype),
-    }
-
-    setInputs((current) => ({
-      ...current,
-      provider: isProvider(provider) ? provider : current.provider,
-      modelId: model && model.trim() ? model.trim() : current.modelId,
-      contextLength: context ?? current.contextLength,
-      sequenceCount: sequences ?? current.sequenceCount,
-      kvCacheDtype: isDtype(kvDtype) ? kvDtype : current.kvCacheDtype,
-      indexerDtype: isDtype(indexerDtype) ? indexerDtype : current.indexerDtype,
-    }))
-    // Only the first mount should seed from the URL.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const serialized = useMemo(() => {
-    const params = new URLSearchParams()
-    if (inputs.provider !== DEFAULTS.provider) params.set('provider', inputs.provider)
-    if (inputs.modelId !== DEFAULTS.modelId) params.set('model', inputs.modelId)
-    if (inputs.contextLength !== DEFAULTS.contextLength) params.set('context', inputs.contextLength)
-    if (inputs.sequenceCount !== DEFAULTS.sequenceCount) {
-      params.set('sequences', inputs.sequenceCount)
-    }
-    if (inputs.kvCacheDtype !== DEFAULTS.kvCacheDtype) params.set('kv_dtype', inputs.kvCacheDtype)
-    if (inputs.indexerDtype !== DEFAULTS.indexerDtype) {
-      params.set('indexer_dtype', inputs.indexerDtype)
-    }
-    return params.toString()
-  }, [inputs])
-
-  useEffect(() => {
-    if (!mounted.current) return
-    if (serialized === searchParams.toString()) return
-    setSearchParams(new URLSearchParams(serialized), { replace: true, preventScrollReset: true })
-  }, [serialized, searchParams, setSearchParams])
-
-  const update = useCallback((patch: Partial<CalculatorInputs>) => {
-    setInputs((current) => ({ ...current, ...patch }))
-  }, [])
+  // The page checks seeded.current.context and seeded.current.dtype before it
+  // applies its own defaults, so those two names are preserved here.
+  const seeded = useMemo(
+    () => ({
+      get current(): CalculatorSeeded {
+        const flags = fieldSeeded.current
+        return {
+          context: flags.contextLength,
+          model: flags.modelId,
+          dtype: flags.kvCacheDtype || flags.indexerDtype,
+        }
+      },
+    }),
+    [fieldSeeded],
+  )
 
   return { inputs, update, serialized, seeded }
 }
