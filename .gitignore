@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # SSR/prerender intermediate output
 dist-ssr
+
+# Agent harness state, not project source
+.pi/
