@@ -357,6 +357,24 @@ describe('input guards', () => {
     }
   })
 
+  it('rejects an unknown dtype with a clear message', () => {
+    // Radix Select can report an empty value; the engine must not surface a
+    // bare "Unknown dtype" error for it.
+    expect(() =>
+      computeKvCache(fixture('qwen3-8b'), {
+        contextLength: 4096,
+        kvCacheDtype: '' as never,
+      }),
+    ).toThrow(/Unknown kv_cache_dtype/)
+
+    expect(() =>
+      computeKvCache(fixture('deepseek-v32-exp'), {
+        contextLength: 4096,
+        indexerDtype: 'NOT_A_DTYPE' as never,
+      }),
+    ).toThrow(/Unknown indexer_dtype/)
+  })
+
   it('scales linearly with sequence count', () => {
     const one = computeKvCache(fixture('qwen3-8b'), { contextLength: 32768, sequenceCount: 1 })
     const four = computeKvCache(fixture('qwen3-8b'), { contextLength: 32768, sequenceCount: 4 })

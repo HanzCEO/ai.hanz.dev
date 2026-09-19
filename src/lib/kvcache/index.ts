@@ -7,8 +7,10 @@ export {
   DEFAULT_DTYPE,
   DTYPES,
   dtypeBytes,
+  dtypeLabel,
   dtypeSupport,
   getDtype,
+  isDtypeId,
   supportFor,
   type DtypeRole,
 } from './dtypes'

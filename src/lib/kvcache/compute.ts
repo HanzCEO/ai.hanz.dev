@@ -1,4 +1,4 @@
-import { DEFAULT_DTYPE, dtypeBytes, dtypeSupport, getDtype } from './dtypes'
+import { DEFAULT_DTYPE, DTYPES, dtypeBytes, dtypeSupport, isDtypeId } from './dtypes'
 import {
   KvCacheInputError,
   type ArchitectureFamily,
@@ -831,6 +831,18 @@ function computeDsv4(
 
 function validate(options: ComputeOptions): void {
   const { contextLength, sequenceCount } = options
+
+  for (const [name, dtype] of [
+    ['kv_cache_dtype', options.kvCacheDtype],
+    ['indexer_dtype', options.indexerDtype],
+  ] as const) {
+    if (!isDtypeId(dtype)) {
+      const known = DTYPES.map((entry) => entry.id).join(', ')
+      throw new KvCacheInputError(
+        `Unknown ${name}: "${String(dtype)}". Pick one of ${known}.`,
+      )
+    }
+  }
   if (!Number.isFinite(contextLength) || contextLength < 1) {
     throw new KvCacheInputError('Context length must be a whole number of at least 1.')
   }
@@ -1045,5 +1057,3 @@ function describeSplit(split: LayerSplit): string {
   }
   return parts.length > 0 ? parts.join(', ') : 'no per layer detail'
 }
-
-export { getDtype, dtypeBytes }

@@ -38,6 +38,11 @@ export const DTYPES: DtypeSpec[] = [
 
 const DTYPE_BY_ID = new Map(DTYPES.map((dtype) => [dtype.id, dtype]))
 
+/** Narrows an arbitrary string to a known dtype id. */
+export function isDtypeId(value: string): value is DtypeId {
+  return DTYPE_BY_ID.has(value as DtypeId)
+}
+
 export function getDtype(id: DtypeId): DtypeSpec {
   const spec = DTYPE_BY_ID.get(id)
   if (!spec) throw new Error(`Unknown dtype: ${id}`)
@@ -46,6 +51,11 @@ export function getDtype(id: DtypeId): DtypeSpec {
 
 export function dtypeBytes(id: DtypeId): number {
   return getDtype(id).bytes
+}
+
+/** Human readable label for a dtype, falling back to the raw id. */
+export function dtypeLabel(id: DtypeId): string {
+  return DTYPE_BY_ID.get(id)?.label ?? id
 }
 
 export const DEFAULT_DTYPE: DtypeId = 'BF16'
