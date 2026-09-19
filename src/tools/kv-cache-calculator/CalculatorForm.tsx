@@ -108,6 +108,7 @@ export default function CalculatorForm({
           <Input
             id="context-length"
             inputMode="numeric"
+            type="number"
             value={inputs.contextLength}
             onChange={(event) => update({ contextLength: event.target.value })}
             aria-invalid={contextError !== null}
@@ -141,6 +142,7 @@ export default function CalculatorForm({
           <Input
             id="sequence-count"
             inputMode="numeric"
+            type="number"
             value={inputs.sequenceCount}
             onChange={(event) => update({ sequenceCount: event.target.value })}
             aria-invalid={sequenceError !== null}
