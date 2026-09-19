@@ -1,0 +1,67 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Required by actions/deploy-pages. Without pages:write and id-token:write the
+# deploy step fails with an opaque error, so both are granted here.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      # This version must match the packageManager field in package.json
+      # character for character. pnpm/action-setup throws "Multiple versions of
+      # pnpm specified" when the two disagree.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.34.5
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The whole tool rests on the size formulas, so guard them before deploy.
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload the build output
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
