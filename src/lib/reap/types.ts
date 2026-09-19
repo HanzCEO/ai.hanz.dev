@@ -119,9 +119,22 @@ export interface ReapResult {
   assumptions: string[]
 }
 
+/** The estimator input a validation error belongs to, when it has one. */
+export type ReapInputField =
+  | 'samples'
+  | 'sequenceLength'
+  | 'pruneRatio'
+  | 'mfu'
+  | 'overheadFactor'
+  | 'microBatchSize'
+
 export class ReapInputError extends Error {
-  constructor(message: string) {
+  /** The field to mark invalid in the form, or null when no single field owns it. */
+  readonly field: ReapInputField | null
+
+  constructor(message: string, field: ReapInputField | null = null) {
     super(message)
     this.name = 'ReapInputError'
+    this.field = field
   }
 }

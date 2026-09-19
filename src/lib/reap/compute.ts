@@ -47,10 +47,16 @@ function clamp(value: number, low: number, high: number): number {
 
 function validate(inputs: ReapInputs): void {
   if (!Number.isInteger(inputs.calibrationSamples) || inputs.calibrationSamples < 1) {
-    throw new ReapInputError('Calibration samples must be a whole number of one or more.')
+    throw new ReapInputError(
+      'Calibration samples must be a whole number of one or more.',
+      'samples',
+    )
   }
   if (!Number.isInteger(inputs.sequenceLength) || inputs.sequenceLength < 1) {
-    throw new ReapInputError('Sequence length must be a whole number of one or more.')
+    throw new ReapInputError(
+      'Sequence length must be a whole number of one or more.',
+      'sequenceLength',
+    )
   }
   if (
     !Number.isFinite(inputs.pruneRatio) ||
@@ -59,16 +65,20 @@ function validate(inputs: ReapInputs): void {
   ) {
     throw new ReapInputError(
       `The pruning ratio must be between 0 and ${MAX_PRUNE_RATIO}. Past that the expert bank stops resembling the original model.`,
+      'pruneRatio',
     )
   }
   if (!Number.isFinite(inputs.mfu) || inputs.mfu <= 0 || inputs.mfu > 1) {
-    throw new ReapInputError('Model factory utilisation must be above 0 and at most 1.')
+    throw new ReapInputError('Model factory utilisation must be above 0 and at most 1.', 'mfu')
   }
   if (!Number.isFinite(inputs.overheadFactor) || inputs.overheadFactor < 1) {
-    throw new ReapInputError('The overhead factor must be at least 1.')
+    throw new ReapInputError('The overhead factor must be at least 1.', 'overheadFactor')
   }
   if (!Number.isInteger(inputs.microBatchSize) || inputs.microBatchSize < 1) {
-    throw new ReapInputError('The micro batch size must be a whole number of one or more.')
+    throw new ReapInputError(
+      'The micro batch size must be a whole number of one or more.',
+      'microBatchSize',
+    )
   }
 }
 

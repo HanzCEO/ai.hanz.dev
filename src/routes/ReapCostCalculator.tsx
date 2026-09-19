@@ -12,7 +12,9 @@ import {
 import {
   DEFAULT_SETUP_SECONDS,
   REAP_FAQ,
+  ReapInputError,
   estimateReap,
+  type ReapInputField,
   type ReapInputs,
   type ReapResult,
 } from '@/lib/reap'
@@ -29,12 +31,13 @@ export default function ReapCostCalculator() {
   const storage: StorageSpec =
     findStorage(inputs.storageId) ?? (findStorage(DEFAULT_STORAGE_ID) as StorageSpec)
 
-  const { result, computeError } = useMemo((): {
+  const { result, computeError, invalidField } = useMemo((): {
     result: ReapResult | null
     computeError: string | null
+    invalidField: ReapInputField | null
   } => {
     if (shapeState.status !== 'ready' || !shapeState.shape) {
-      return { result: null, computeError: null }
+      return { result: null, computeError: null, invalidField: null }
     }
 
     const reapInputs: ReapInputs = {
@@ -52,12 +55,17 @@ export default function ReapCostCalculator() {
     }
 
     try {
-      return { result: estimateReap(shapeState.shape, reapInputs), computeError: null }
+      return {
+        result: estimateReap(shapeState.shape, reapInputs),
+        computeError: null,
+        invalidField: null,
+      }
     } catch (error) {
       return {
         result: null,
         computeError:
           error instanceof Error ? error.message : 'Those inputs could not be costed.',
+        invalidField: error instanceof ReapInputError ? error.field : null,
       }
     }
   }, [shapeState.status, shapeState.shape, inputs, gpu, storage])
@@ -95,7 +103,13 @@ export default function ReapCostCalculator() {
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
-        <ReapForm inputs={inputs} update={update} shapeState={shapeState} gpu={gpu} />
+        <ReapForm
+          inputs={inputs}
+          update={update}
+          shapeState={shapeState}
+          gpu={gpu}
+          invalidField={invalidField}
+        />
         <ReapResults
           result={result}
           shapeState={shapeState}

@@ -23,6 +23,7 @@ export {
   ReapInputError,
   type MoeShape,
   type ReapBound,
+  type ReapInputField,
   type ReapInputs,
   type ReapResult,
   type ReapVerdict,

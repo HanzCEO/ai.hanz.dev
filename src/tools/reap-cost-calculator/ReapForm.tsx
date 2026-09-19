@@ -7,6 +7,7 @@ import {
   CALIBRATION_PRESETS,
   PRUNE_RATIOS,
   findCalibrationPreset,
+  type ReapInputField,
   type WeightDtype,
 } from '@/lib/reap'
 import { Input } from '@/components/ui/input'
@@ -46,6 +47,8 @@ function Field({
   value,
   onChange,
   invalid,
+  min,
+  decimal,
 }: {
   id: string
   label: string
@@ -53,6 +56,9 @@ function Field({
   value: string
   onChange: (value: string) => void
   invalid?: boolean
+  min?: number
+  /** A fraction is allowed, which changes the step and the on-screen keyboard. */
+  decimal?: boolean
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -61,7 +67,10 @@ function Field({
       </label>
       <Input
         id={id}
-        inputMode="numeric"
+        type="number"
+        inputMode={decimal ? 'decimal' : 'numeric'}
+        step={decimal ? 'any' : 1}
+        min={min}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={invalid}
@@ -76,9 +85,11 @@ interface ReapFormProps {
   update: (patch: Partial<ReapFormInputs>) => void
   shapeState: ReapShapeState
   gpu: GpuSpec
+  /** The input the estimator rejected, so it can be marked in the form. */
+  invalidField: ReapInputField | null
 }
 
-export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormProps) {
+export default function ReapForm({ inputs, update, shapeState, gpu, invalidField }: ReapFormProps) {
   const [showToken, setShowToken] = useState(false)
   const providerSpec = PROVIDER_LIST.find((spec) => spec.id === inputs.provider)
   const presetId = activePresetId(inputs.samples, inputs.sequenceLength)
@@ -228,6 +239,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
           <Field
             id="reap-hidden"
             label="hidden_size"
+            min={1}
             value={inputs.hiddenSize}
             onChange={(hiddenSize) => update({ hiddenSize })}
           />
@@ -235,12 +247,14 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
             id="reap-moe-ffn"
             label="moe_intermediate_size"
             hint="Width of one expert."
+            min={1}
             value={inputs.moeIntermediateSize}
             onChange={(moeIntermediateSize) => update({ moeIntermediateSize })}
           />
           <Field
             id="reap-experts"
             label="routed experts"
+            min={1}
             value={inputs.routedExperts}
             onChange={(routedExperts) => update({ routedExperts })}
           />
@@ -248,12 +262,14 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
             id="reap-topk"
             label="experts per token"
             hint="The router top-k."
+            min={1}
             value={inputs.expertsPerToken}
             onChange={(expertsPerToken) => update({ expertsPerToken })}
           />
           <Field
             id="reap-layers"
             label="num_hidden_layers"
+            min={1}
             value={inputs.numLayers}
             onChange={(numLayers) => update({ numLayers })}
           />
@@ -261,6 +277,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
             id="reap-moe-layers"
             label="layers with experts"
             hint="The rest are dense MLPs."
+            min={1}
             value={inputs.moeLayers}
             onChange={(moeLayers) => update({ moeLayers })}
           />
@@ -268,6 +285,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
             id="reap-shared"
             label="shared experts"
             hint="Always-on experts. Zero for most models."
+            min={0}
             value={inputs.sharedExperts}
             onChange={(sharedExperts) => update({ sharedExperts })}
           />
@@ -275,30 +293,35 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
             id="reap-ffn"
             label="intermediate_size"
             hint="Dense MLP width, used by non-expert layers."
+            min={1}
             value={inputs.intermediateSize}
             onChange={(intermediateSize) => update({ intermediateSize })}
           />
           <Field
             id="reap-vocab"
             label="vocab_size"
+            min={1}
             value={inputs.vocabSize}
             onChange={(vocabSize) => update({ vocabSize })}
           />
           <Field
             id="reap-heads"
             label="attention heads"
+            min={1}
             value={inputs.attentionHeads}
             onChange={(attentionHeads) => update({ attentionHeads })}
           />
           <Field
             id="reap-head-dim"
             label="head_dim"
+            min={1}
             value={inputs.headDim}
             onChange={(headDim) => update({ headDim })}
           />
           <Field
             id="reap-kv-heads"
             label="key and value heads"
+            min={1}
             value={inputs.kvHeads}
             onChange={(kvHeads) => update({ kvHeads })}
           />
@@ -355,14 +378,18 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
           <Field
             id="reap-samples"
             label="Samples"
+            min={1}
             value={inputs.samples}
             onChange={(samples) => update({ samples })}
+            invalid={invalidField === 'samples'}
           />
           <Field
             id="reap-seq"
             label="Tokens per sample"
+            min={1}
             value={inputs.sequenceLength}
             onChange={(sequenceLength) => update({ sequenceLength })}
+            invalid={invalidField === 'sequenceLength'}
           />
         </div>
 
@@ -452,22 +479,29 @@ export default function ReapForm({ inputs, update, shapeState, gpu }: ReapFormPr
             id="reap-mfu"
             label="GPU utilisation"
             hint="A share of dense peak, between 0 and 1. A third is realistic."
+            decimal
             value={inputs.mfu}
             onChange={(mfu) => update({ mfu })}
+            invalid={invalidField === 'mfu'}
           />
           <Field
             id="reap-overhead"
             label="Overhead factor"
             hint="Framework, observer, and dataloader cost over the raw figure."
+            decimal
+            min={1}
             value={inputs.overheadFactor}
             onChange={(overheadFactor) => update({ overheadFactor })}
+            invalid={invalidField === 'overheadFactor'}
           />
           <Field
             id="reap-micro-batch"
             label="Micro batch"
             hint="Samples in flight at once. Drives the activation buffer."
+            min={1}
             value={inputs.microBatchSize}
             onChange={(microBatchSize) => update({ microBatchSize })}
+            invalid={invalidField === 'microBatchSize'}
           />
           <div className="flex flex-col justify-center gap-2">
             <label htmlFor="reap-scale-topk" className="flex items-center gap-2 text-sm font-medium">
