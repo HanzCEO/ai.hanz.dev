@@ -33,7 +33,7 @@ export interface RouteMeta {
  * form would advertise a redirect instead of the page itself.
  */
 export const KV_CACHE_PATH = '/tools/kv-cache-calculator/'
-export const REAP_PATH = '/tools/reap-cost-calculator/'
+export const REAP_PATH = '/tools/cost-to-reap-calculator/'
 
 const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
 const REAP_DESCRIPTION =

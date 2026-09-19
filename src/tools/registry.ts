@@ -25,7 +25,7 @@ export const tools: Tool[] = [
     status: 'ready',
   },
   {
-    slug: 'reap-cost-calculator',
+    slug: 'cost-to-reap-calculator',
     name: 'REAP Cost Calculator',
     description:
       'Estimates how long REAP expert pruning takes for a mixture of experts model, whether one expert block fits your GPU, and how much smaller the pruned model gets.',
