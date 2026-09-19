@@ -1089,7 +1089,8 @@ function computeDsv41(
   if (options.kvCacheDtype === 'FP4') {
     assumptions.push(
       `The main cache is packed as FP4 (E2M1) with one E4M3 scale per 16 channels: ${mainElements} elements become ${mainBytesPerEntry} bytes per entry.`,
-    )  }
+    )
+  }
   if (hasIndexer && options.indexerDtype === 'FP4') {
     assumptions.push(
       `The indexer key cache is packed as FP4 (E2M1) with one UE8M0 scale per 32 values: ${indexHeadDim} elements become ${indexerBytesPerEntry} bytes per entry.`,
