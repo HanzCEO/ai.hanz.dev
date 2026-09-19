@@ -1,7 +1,8 @@
-// Layout and styling that is easier to express as SCSS than as utility classes.
-// Tailwind lives in src/index.css and is imported before this file.
+// Layout shell. Tailwind handles the rest; these are the few pieces that read
+// better as plain CSS with shared values.
 
 $page-max-width: 72rem;
+$gutter: 1.25rem;
 
 .site-shell {
   min-height: 100dvh;
@@ -9,10 +10,22 @@ $page-max-width: 72rem;
   flex-direction: column;
 }
 
-.site-main {
+.site-container {
   width: 100%;
   max-width: $page-max-width;
   margin-inline: auto;
-  padding-inline: 1.25rem;
+  padding-inline: $gutter;
+}
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+}
+
+.site-main {
   flex: 1;
+  padding-block: 2.5rem 3rem;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
 }
