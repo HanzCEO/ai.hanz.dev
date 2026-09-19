@@ -53,6 +53,12 @@ function readBoolean(config: RawConfig, key: string): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined
 }
 
+function readObject(config: RawConfig, key: string): RawConfig | undefined {
+  const value = config[key]
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as RawConfig
+  return undefined
+}
+
 /**
  * Multimodal configs (DeepSeek-V4.1-Flash, Qwen3.5, Gemma 4) keep the language
  * model fields under a nested key. Returns the inner config plus the outer one,
@@ -91,6 +97,11 @@ const HYBRID_TYPES = new Set([
   'qwen3_5_moe',
   'qwen3_5_text',
   'qwen3_5_moe_text',
+  'qwen4_exp',
+  'qwen4_exp_text',
+  'kimi_k3',
+  'kimi_linear',
+  'solar_open2',
   'nemotron_h',
   'bamba',
   'zamba2',
@@ -104,10 +115,14 @@ const MLA_TYPES = new Set([
   'deepseek_v3',
   'deepseek_v32',
   'kimi_k2',
+  'kimi_k25',
   'glm4_moe_lite',
   'glm_moe_dsa',
   'xing4_0',
   'ernie4_5_moe',
+  'axk2',
+  'bailing_hybrid',
+  'hy_v4',
 ])
 const GQA_TYPES = new Set([
   'qwen2',
@@ -117,6 +132,7 @@ const GQA_TYPES = new Set([
   'qwen3_5_dense',
   'llama',
   'mistral',
+  'mistral3',
   'mixtral',
   'gemma2',
   'gemma3',
@@ -145,6 +161,9 @@ const GQA_TYPES = new Set([
   'nemotron',
   'hunyuan_v1_dense',
   'hunyuan_v1_moe',
+  'hy_v3',
+  'inkling_mm_model',
+  'minimax_m2',
 ])
 
 const FAMILY_LABELS: Record<ArchitectureFamily, string> = {
@@ -184,7 +203,8 @@ export function detectArchitecture(inner: RawConfig, outer: RawConfig): Detectio
   if (
     matches(HYBRID_TYPES) ||
     readNumber(inner, 'linear_num_value_heads') !== undefined ||
-    readString(inner, 'hybrid_override_pattern') !== undefined
+    readString(inner, 'hybrid_override_pattern') !== undefined ||
+    readObject(inner, 'linear_attn_config') !== undefined
   ) {
     return {
       family: 'hybrid_linear',
@@ -552,31 +572,63 @@ function computeHybrid(
   const constants: ConstantUsed[] = []
   const assumptions: string[] = []
 
-  const numLayers = readNumber(inner, 'num_hidden_layers')
+  // Nemotron-H style configs omit num_hidden_layers entirely and describe the
+  // model as a flat array of per layer block types, where the array length is
+  // the layer count.
+  const layersBlockType = readStringArray(inner, 'layers_block_type')
+  const numLayers = readNumber(inner, 'num_hidden_layers') ?? layersBlockType?.length
   const numHeads = readNumber(inner, 'num_attention_heads')
   const hiddenSize = readNumber(inner, 'hidden_size')
 
   if (!numLayers || !numHeads) {
     throw new KvCacheInputError(
-      'This config does not list num_hidden_layers and num_attention_heads, so the cache size cannot be derived from it.',
+      'This config does not list num_hidden_layers or layers_block_type alongside num_attention_heads, so the cache size cannot be derived from it.',
     )
   }
 
   const kvHeads = readNumber(inner, 'num_key_value_heads') ?? numHeads
   const headDim = readNumber(inner, 'head_dim') ?? Math.floor((hiddenSize ?? 0) / numHeads)
-  if (!headDim || headDim <= 0) {
+
+  // A hybrid whose full attention layers use MLA stores one compressed latent
+  // per token instead of a key and a value per head, so the head geometry is
+  // only needed when that is not the case.
+  const kvLoraRank = readNumber(inner, 'kv_lora_rank')
+  const ropeDim = readNumber(inner, 'qk_rope_head_dim') ?? 64
+  const usesLatentCache = kvLoraRank !== undefined && kvLoraRank > 0
+
+  if (!usesLatentCache && (!headDim || headDim <= 0)) {
     throw new KvCacheInputError('Could not determine head_dim for the full attention layers.')
   }
 
-  constants.push(
-    { key: 'num_hidden_layers', value: numLayers, source: 'config' },
-    { key: 'num_key_value_heads', value: kvHeads, source: 'config' },
-    { key: 'head_dim', value: headDim, source: readNumber(inner, 'head_dim') ? 'config' : 'derived' },
-  )
+  constants.push({ key: 'num_hidden_layers', value: numLayers, source: 'config' })
+  if (!usesLatentCache) {
+    constants.push(
+      { key: 'num_key_value_heads', value: kvHeads, source: 'config' },
+      {
+        key: 'head_dim',
+        value: headDim,
+        source: readNumber(inner, 'head_dim') ? 'config' : 'derived',
+      },
+    )
+  }
 
   const layerTypes = readStringArray(inner, 'layer_types')
   const fullAttentionInterval = readNumber(inner, 'full_attention_interval')
   const hybridPattern = readString(inner, 'hybrid_override_pattern')
+  const linearAttnConfig = readObject(inner, 'linear_attn_config')
+
+  const gqaIndices = readNumberArray(inner, 'gqa_layers')
+  const kdaFullIndices = linearAttnConfig
+    ? readNumberArray(linearAttnConfig, 'full_attn_layers')
+    : undefined
+  // Some linear attention hybrids list the full attention layers by index rather
+  // than giving a type per layer. The indices are counted instead of
+  // dereferenced, so gqa_layers (0 based) and full_attn_layers (1 based) are
+  // read the same way.
+  const fullAttentionIndices = gqaIndices ?? kdaFullIndices
+  const fullAttentionIndexSource = gqaIndices
+    ? 'gqa_layers'
+    : 'linear_attn_config.full_attn_layers'
 
   let fullLayers = 0
   let linearLayers = 0
@@ -598,9 +650,32 @@ function computeHybrid(
     fullLayers = Math.floor(numLayers / fullAttentionInterval)
     linearLayers = numLayers - fullLayers
     constants.push({ key: 'full_attention_interval', value: fullAttentionInterval, source: 'config' })
+  } else if (fullAttentionIndices) {
+    fullLayers = Math.min(new Set(fullAttentionIndices).size, numLayers)
+    linearLayers = numLayers - fullLayers
+    constants.push({
+      key: fullAttentionIndexSource,
+      value: `${fullLayers} full / ${linearLayers} linear`,
+      source: 'config',
+    })
+  } else if (layersBlockType) {
+    const types = layersBlockType.slice(0, numLayers)
+    fullLayers = countBy(types, 'attention')
+    linearLayers = countBy(types, 'mamba')
+    const inertLayers = numLayers - fullLayers - linearLayers
+    constants.push({
+      key: 'layers_block_type',
+      value: `${fullLayers} attention / ${linearLayers} mamba / ${inertLayers} moe`,
+      source: 'config',
+    })
+    if (inertLayers > 0) {
+      assumptions.push(
+        `layers_block_type lists ${inertLayers} moe layers, which are feed forward blocks and hold no cache. They are counted in the ${numLayers} layer total but not as caching layers.`,
+      )
+    }
   } else {
     throw new KvCacheInputError(
-      'This hybrid config has no layer_types, hybrid_override_pattern, or full_attention_interval, so the layer split is unknown.',
+      'This hybrid config has no layer_types, hybrid_override_pattern, full_attention_interval, gqa_layers, linear_attn_config.full_attn_layers, or layers_block_type, so the layer split is unknown.',
     )
   }
 
@@ -609,22 +684,46 @@ function computeHybrid(
 
   if (fullLayers > 0) {
     const window = slidingWindow && slidingWindow > 0 ? slidingWindow : contextLength
+    if (usesLatentCache) {
+      constants.push(
+        { key: 'kv_lora_rank', value: kvLoraRank, source: 'config' },
+        {
+          key: 'qk_rope_head_dim',
+          value: ropeDim,
+          source: readNumber(inner, 'qk_rope_head_dim') === undefined ? 'assumed 64' : 'config',
+        },
+      )
+      assumptions.push(
+        'The full attention layers of this hybrid store one compressed MLA latent per token, so their cache does not scale with the number of heads.',
+      )
+    }
     kinds.push({
       label: 'full attention layers',
-      bytesPerEntry: 2 * kvHeads * headDim * kvBytes,
+      bytesPerEntry: usesLatentCache
+        ? (kvLoraRank + ropeDim) * kvBytes
+        : 2 * kvHeads * headDim * kvBytes,
       entriesPerSequence: Math.min(contextLength, window),
       layers: fullLayers,
-      formula: `2 x ${kvHeads} kv heads x ${headDim} head dim x ${kvBytes} bytes`,
+      formula: usesLatentCache
+        ? `(${kvLoraRank} kv_lora_rank + ${ropeDim} qk_rope_head_dim) x ${kvBytes} bytes`
+        : `2 x ${kvHeads} kv heads x ${headDim} head dim x ${kvBytes} bytes`,
     })
   }
 
   // Linear attention layers hold a fixed size recurrent state. It does not grow
-  // with context length, which is the whole point of the architecture.
-  const stateDtypeName = readString(inner, 'mamba_ssm_dtype')
+  // with context length, which is the whole point of the architecture. The state
+  // width is the attention cache width unless the config names its own dtype.
+  // Nemotron-H calls this field mamba_ssm_cache_dtype.
+  const stateDtypeKey = readString(inner, 'mamba_ssm_dtype')
+    ? 'mamba_ssm_dtype'
+    : readString(inner, 'mamba_ssm_cache_dtype')
+      ? 'mamba_ssm_cache_dtype'
+      : undefined
+  const stateDtypeName = stateDtypeKey ? readString(inner, stateDtypeKey) : undefined
   const stateBytes = dtypeNameToBytes(stateDtypeName) ?? kvBytes
   if (stateDtypeName && dtypeNameToBytes(stateDtypeName) === undefined) {
     assumptions.push(
-      `mamba_ssm_dtype is "${stateDtypeName}", which was not recognised, so the state was counted at the attention cache width.`,
+      `${stateDtypeKey} is "${stateDtypeName}", which was not recognised, so the state was counted at the attention cache width.`,
     )
   }
 
@@ -682,6 +781,31 @@ function computeHybrid(
     assumptions.push(
       'The Mamba state was sized from mamba_num_heads, mamba_head_dim, and ssm_state_size. Verify against the implementation you deploy.',
     )
+  } else if (linearAttnConfig) {
+    const kdaHeads = readNumber(linearAttnConfig, 'num_heads')
+    const kdaHeadDim = readNumber(linearAttnConfig, 'head_dim')
+    const kdaConvKernel = readNumber(linearAttnConfig, 'short_conv_kernel_size')
+    if (kdaHeads && kdaHeadDim) {
+      const kernel = kdaConvKernel ?? 4
+      // The delta rule keeps a head_dim x head_dim state per head, plus a short
+      // convolution state over the q, k and v projections.
+      const recurrent = kdaHeads * kdaHeadDim * kdaHeadDim
+      const conv = 3 * kdaHeads * kdaHeadDim * kernel
+      stateElementsPerLayer = recurrent + conv
+      stateFormula = `${kdaHeads} heads x ${kdaHeadDim} head dim x ${kdaHeadDim} state dim, plus a conv state of width ${kernel}`
+      stateInputs.push(
+        { key: 'linear_attn_config.num_heads', value: kdaHeads },
+        { key: 'linear_attn_config.head_dim', value: kdaHeadDim },
+        { key: 'linear_attn_config.short_conv_kernel_size', value: kernel },
+      )
+      constants.push(
+        { key: 'linear_attn_config.num_heads', value: kdaHeads, source: 'config' },
+        { key: 'linear_attn_config.head_dim', value: kdaHeadDim, source: 'config' },
+      )
+      assumptions.push(
+        'The linear attention state was sized from linear_attn_config num_heads, head_dim, and short_conv_kernel_size.',
+      )
+    }
   }
 
   let state: FamilyComputation['state'] = null
@@ -694,8 +818,8 @@ function computeHybrid(
       note: 'Constant. It does not grow with context length, so it is reported per sequence rather than per token.',
     }
     assumptions.push(
-      stateDtypeName
-        ? `Linear attention state was counted at ${stateBytes} bytes per element, from mamba_ssm_dtype.`
+      stateDtypeKey
+        ? `Linear attention state was counted at ${stateBytes} bytes per element, from ${stateDtypeKey}.`
         : `The config does not set mamba_ssm_dtype, so the linear attention state was counted at the attention cache width of ${stateBytes} bytes per element.`,
     )
   } else if (linearLayers > 0) {
