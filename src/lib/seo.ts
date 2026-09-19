@@ -26,7 +26,15 @@ export interface RouteMeta {
   jsonLd?: Record<string, unknown>
 }
 
-const REAP_PATH = '/tools/reap-cost-calculator'
+/**
+ * Route paths carry a trailing slash because that is the only form GitHub Pages
+ * answers with a 200. A request for the bare form is a 301 to the slashed form,
+ * so any canonical, og:url, sitemap entry, or internal link built from the bare
+ * form would advertise a redirect instead of the page itself.
+ */
+export const KV_CACHE_PATH = '/tools/kv-cache-calculator/'
+export const REAP_PATH = '/tools/reap-cost-calculator/'
+
 const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
 const REAP_DESCRIPTION =
   'REAP duration calculator for mixture of experts models. Estimate how long REAP expert pruning takes, check whether one expert block fits your GPU, and see how much smaller the pruned model gets.'
@@ -39,7 +47,7 @@ export const ROUTE_META: RouteMeta[] = [
       'Tools for AI developers. Size a KV cache from a model config, or estimate the cost of pruning a mixture of experts with REAP.',
   },
   {
-    path: '/tools/kv-cache-calculator',
+    path: KV_CACHE_PATH,
     title: 'KV Cache Calculator | ai.hanz.dev',
     description:
       'Estimate KV cache size for any model on HuggingFace or ModelScope. Set context length, sequence count, and cache dtype.',
@@ -83,10 +91,16 @@ export function normalizePath(pathname: string): string {
   return withoutQuery
 }
 
-/** Returns the matching route, or null when nothing matches. */
+/**
+ * Returns the matching route, or null when nothing matches.
+ *
+ * Both sides are normalized because the route path carries the canonical slash
+ * while a request may or may not. That keeps /a and /a/ resolving to the same
+ * entry even on a host that does not redirect the bare form.
+ */
 export function matchRoute(pathname: string): RouteMeta | null {
   const path = normalizePath(pathname)
-  return ROUTE_META.find((meta) => meta.path === path) ?? null
+  return ROUTE_META.find((meta) => normalizePath(meta.path) === path) ?? null
 }
 
 export function getNotFoundMeta(): RouteMeta {
@@ -106,9 +120,14 @@ export function getRouteMeta(pathname: string): RouteMeta {
  * The marker a correctly prerendered document would carry for this URL. The
  * client compares it against what the server actually sent, so it only hydrates
  * markup that belongs to the route it is rendering.
+ *
+ * The answer is the route's own canonical path, because that is the string the
+ * prerender step stamps onto #root. Returning the normalized request path
+ * instead would hand back the bare form for a slashed request and make every
+ * hydration check fail.
  */
 export function prerenderMarkerFor(pathname: string): string {
-  return matchRoute(pathname) ? normalizePath(pathname) : PRERENDER_WILDCARD
+  return matchRoute(pathname)?.path ?? PRERENDER_WILDCARD
 }
 
 export function canonicalUrl(path: string): string {

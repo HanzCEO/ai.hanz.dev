@@ -25,7 +25,22 @@ const ORIGIN = 'https://ai.hanz.dev'
 /** Where each route's HTML file lives, relative to dist/. */
 function outputPathFor(route) {
   if (route === '/') return join(distDir, 'index.html')
-  return join(distDir, route.replace(/^\//, ''), 'index.html')
+  // A route path may or may not carry a trailing slash. Both name the same
+  // directory index, so strip whichever slashes are present before joining.
+  const segments = route.replace(/^\/+/, '').replace(/\/+$/, '')
+  return join(distDir, segments, 'index.html')
+}
+
+/**
+ * The URL a route is served under.
+ *
+ * The root is the origin alone. A nested route keeps the trailing slash because
+ * that is the only form the host answers with a 200; the bare form is a 301, so
+ * a sitemap entry without the slash would point at a redirect.
+ */
+function canonicalUrlFor(route) {
+  if (route === '/') return `${ORIGIN}/`
+  return `${ORIGIN}${route.replace(/\/+$/, '')}/`
 }
 
 function escapeXml(value) {
@@ -93,7 +108,7 @@ async function main() {
       const meta = getRouteMeta(route)
       return [
         '  <url>',
-        `    <loc>${escapeXml(`${ORIGIN}${route}`)}</loc>`,
+        `    <loc>${escapeXml(canonicalUrlFor(route))}</loc>`,
         `    <title>${escapeXml(meta.title)}</title>`,
         '    <changefreq>monthly</changefreq>',
         '  </url>',

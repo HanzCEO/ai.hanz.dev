@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  KV_CACHE_PATH,
   NOT_FOUND_PATH,
   PRERENDER_ROUTES,
   PRERENDER_WILDCARD,
+  ROUTE_META,
   SITE_ORIGIN,
+  canonicalUrl,
   faqJsonLd,
   getNotFoundMeta,
   getRouteMeta,
@@ -38,8 +41,15 @@ describe('normalizePath', () => {
 describe('matchRoute', () => {
   it('matches a known route with or without a trailing slash', () => {
     expect(matchRoute('/')?.path).toBe('/')
-    expect(matchRoute('/tools/kv-cache-calculator')?.path).toBe('/tools/kv-cache-calculator')
-    expect(matchRoute('/tools/kv-cache-calculator/')?.path).toBe('/tools/kv-cache-calculator')
+    expect(matchRoute('/tools/kv-cache-calculator')?.path).toBe(KV_CACHE_PATH)
+    expect(matchRoute('/tools/kv-cache-calculator/')?.path).toBe(KV_CACHE_PATH)
+  })
+
+  it('resolves both request forms to the same route entry', () => {
+    // Same object identity, so metadata cannot differ between the two forms.
+    expect(matchRoute('/tools/kv-cache-calculator')).toBe(
+      matchRoute('/tools/kv-cache-calculator/'),
+    )
   })
 
   it('returns null for anything unknown', () => {
@@ -49,11 +59,32 @@ describe('matchRoute', () => {
   })
 })
 
+describe('ROUTE_META', () => {
+  it('gives every nested route the trailing slash the host serves', () => {
+    // The bare form of a nested route is a 301 on GitHub Pages, so a path
+    // without the slash here would ship a canonical that redirects.
+    for (const meta of ROUTE_META) {
+      if (meta.path === '/') continue
+      expect(meta.path.endsWith('/')).toBe(true)
+    }
+  })
+
+  it('keeps the root path as a single slash', () => {
+    expect(ROUTE_META[0].path).toBe('/')
+    expect(PRERENDER_ROUTES[0]).toBe('/')
+  })
+})
+
 describe('getRouteMeta', () => {
   it('returns the matching route metadata', () => {
     const meta = getRouteMeta('/tools/kv-cache-calculator')
     expect(meta.title).toBe('KV Cache Calculator | ai.hanz.dev')
     expect(meta.noindex).toBeUndefined()
+    expect(meta.path).toBe(KV_CACHE_PATH)
+  })
+
+  it('carries the canonical path onto the slashed request as well', () => {
+    expect(getRouteMeta('/tools/kv-cache-calculator/').path).toBe(KV_CACHE_PATH)
   })
 
   it('falls back to the not found metadata for an unknown path', () => {
@@ -66,10 +97,11 @@ describe('getRouteMeta', () => {
 })
 
 describe('prerenderMarkerFor', () => {
-  it('returns the route itself for a known path', () => {
+  it('returns the route canonical path for a known path in either form', () => {
     expect(prerenderMarkerFor('/')).toBe('/')
-    expect(prerenderMarkerFor('/tools/kv-cache-calculator')).toBe('/tools/kv-cache-calculator')
-    expect(prerenderMarkerFor('/tools/kv-cache-calculator/')).toBe('/tools/kv-cache-calculator')
+    expect(prerenderMarkerFor('/tools/kv-cache-calculator')).toBe(KV_CACHE_PATH)
+    expect(prerenderMarkerFor('/tools/kv-cache-calculator/')).toBe(KV_CACHE_PATH)
+    expect(prerenderMarkerFor('/tools/kv-cache-calculator//')).toBe(KV_CACHE_PATH)
   })
 
   it('returns the wildcard for an unknown path, since 404.html covers all of them', () => {
@@ -85,6 +117,17 @@ describe('prerenderMarkerFor', () => {
   })
 })
 
+describe('canonicalUrl', () => {
+  it('builds the URL the host actually serves', () => {
+    // The bare form of a nested route is a 301, so the canonical has to carry
+    // the slash or it would name a redirect instead of the page.
+    expect(canonicalUrl(getRouteMeta('/tools/kv-cache-calculator').path)).toBe(
+      `${SITE_ORIGIN}/tools/kv-cache-calculator/`,
+    )
+    expect(canonicalUrl(getRouteMeta('/').path)).toBe(`${SITE_ORIGIN}/`)
+  })
+})
+
 describe('headTags', () => {
   it('gives an indexable page a canonical URL and social tags', () => {
     const tags = headTags(getRouteMeta('/tools/kv-cache-calculator'))
@@ -92,7 +135,7 @@ describe('headTags', () => {
       tags.find((tag) => tag.attrs.rel === name || tag.attrs.property === name || tag.attrs.name === name)
 
     expect(byName('canonical')?.attrs.href).toBe(
-      `${SITE_ORIGIN}/tools/kv-cache-calculator`,
+      `${SITE_ORIGIN}/tools/kv-cache-calculator/`,
     )
     expect(byName('og:title')?.attrs.content).toBe('KV Cache Calculator | ai.hanz.dev')
     expect(byName('twitter:card')?.attrs.content).toBe('summary')
@@ -218,7 +261,7 @@ describe('softwareApplicationJsonLd', () => {
   it('describes the tool with its canonical URL', () => {
     const node = softwareApplicationJsonLd(getRouteMeta('/tools/kv-cache-calculator'))
     expect(node['@type']).toBe('SoftwareApplication')
-    expect(node.url).toBe(`${SITE_ORIGIN}/tools/kv-cache-calculator`)
+    expect(node.url).toBe(`${SITE_ORIGIN}/tools/kv-cache-calculator/`)
     expect(node.isAccessibleForFree).toBe(true)
     expect(node.applicationCategory).toBe('DeveloperApplication')
   })

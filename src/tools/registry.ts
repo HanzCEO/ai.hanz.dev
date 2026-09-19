@@ -34,6 +34,10 @@ export const tools: Tool[] = [
   },
 ]
 
+/**
+ * The path a tool card links to. It carries the trailing slash because that is
+ * the form the host serves with a 200, so a click does not spend a redirect.
+ */
 export function toolPath(slug: string): string {
-  return `/tools/${slug}`
+  return `/tools/${slug}/`
 }
