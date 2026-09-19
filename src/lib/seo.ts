@@ -23,13 +23,13 @@ export const ROUTE_META: RouteMeta[] = [
     path: '/',
     title: 'ai.hanz.dev | Tools for AI developers',
     description:
-      'Small, focused tools for people building with language models. Start with the KV cache calculator, which sizes a cache straight from the model config.',
+      'Tools for AI developers. Start with the KV cache calculator, which sizes a cache from the model config.',
   },
   {
     path: '/tools/kv-cache-calculator',
     title: 'KV Cache Calculator | ai.hanz.dev',
     description:
-      'Estimate KV cache size for any model on HuggingFace or ModelScope. Set context length, sequence count, and cache dtype, then read the full calculation.',
+      'Estimate KV cache size for any model on HuggingFace or ModelScope. Set context length, sequence count, and cache dtype.',
   },
 ]
 
@@ -65,7 +65,7 @@ export function getNotFoundMeta(): RouteMeta {
   return {
     path: NOT_FOUND_PATH,
     title: 'Page not found | ai.hanz.dev',
-    description: 'That page does not exist. Head back to the tool list.',
+    description: 'Head back to the tool list.',
     noindex: true,
   }
 }

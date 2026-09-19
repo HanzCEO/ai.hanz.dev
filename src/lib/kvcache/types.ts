@@ -22,8 +22,6 @@ export interface DtypeSpec {
   label: string
   /** Bytes per element. Fractional for sub-byte formats. */
   bytes: number
-  /** Short note shown next to the option. */
-  note: string
 }
 
 export interface DtypeSupport {

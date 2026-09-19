@@ -90,7 +90,7 @@ export default function KvCacheCalculator() {
         <h1 className="text-2xl font-medium tracking-tight">KV Cache Calculator</h1>
         <p className="text-muted-foreground">
           Size the cache for a model, a context length, and a sequence count. The config is read
-          from HuggingFace or ModelScope, so the answer follows the real architecture.
+          from HuggingFace or ModelScope.
         </p>
       </header>
 

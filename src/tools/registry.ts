@@ -5,9 +5,7 @@ export type ToolStatus = 'ready' | 'planned'
 export interface Tool {
   slug: string
   name: string
-  /** One line, shown on the card. */
-  tagline: string
-  /** A short paragraph, shown on the card. */
+  /** Shown on the card. */
   description: string
   icon: LucideIcon
   status: ToolStatus
@@ -21,9 +19,8 @@ export const tools: Tool[] = [
   {
     slug: 'kv-cache-calculator',
     name: 'KV Cache Calculator',
-    tagline: 'How much memory the cache will actually take',
     description:
-      'Sizes the cache from the real model config, not a hardcoded table. Covers grouped query attention, MLA, hybrid linear attention, and sparse attention.',
+      'Sizes the cache for models using grouped query attention, MLA, hybrid linear attention, or sparse attention.',
     icon: Calculator,
     status: 'ready',
   },

@@ -6,9 +6,6 @@ export default function Home() {
     <div className="flex flex-col gap-10">
       <section className="flex max-w-2xl flex-col gap-3">
         <h1 className="text-2xl font-medium tracking-tight">Tools for AI developers</h1>
-        <p className="text-muted-foreground">
-          Small calculators for the fiddly parts of model serving. Every number shows its work.
-        </p>
       </section>
 
       <section aria-labelledby="tool-list-heading" className="flex flex-col gap-4">

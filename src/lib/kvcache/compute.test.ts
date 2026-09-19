@@ -270,7 +270,6 @@ describe('best effort handling', () => {
 
     expect(result.bestEffort).toBe(true)
     expect(result.totalBytes).toBe(2 * 4 * 64 * 2 * 24 * 8192)
-    expect(result.assumptions.join(' ')).toMatch(/best effort/i)
   })
 
   it('falls back to the MLA shape when kv_lora_rank is present', () => {

@@ -6,34 +6,14 @@ import type { ArchitectureFamily, DtypeId, DtypeSpec, DtypeSupport, SupportLevel
  * a whole byte in practice once packed with their scales.
  */
 export const DTYPES: DtypeSpec[] = [
-  { id: 'BF16', label: 'BF16', bytes: 2, note: 'Brain float. Default for most caches.' },
-  { id: 'FP16', label: 'FP16', bytes: 2, note: 'Same width as BF16, narrower exponent range.' },
-  {
-    id: 'FP32',
-    label: 'FP32',
-    bytes: 4,
-    note: 'Unquantized, so double the cache. Rarely worth it.',
-  },
-  {
-    id: 'FP8_E4M3',
-    label: 'FP8 (E4M3)',
-    bytes: 1,
-    note: 'Most common quantized cache. Needs an accuracy check.',
-  },
-  {
-    id: 'FP8_E5M2',
-    label: 'FP8 (E5M2)',
-    bytes: 1,
-    note: 'Wider exponent range, fewer mantissa bits.',
-  },
-  { id: 'INT8', label: 'INT8', bytes: 1, note: 'Integer cache with per-channel scales.' },
-  { id: 'INT4', label: 'INT4', bytes: 0.5, note: 'Packed 4 bit with a scale per group.' },
-  {
-    id: 'FP4',
-    label: 'FP4',
-    bytes: 0.5,
-    note: '4 bit float. Used for indexer caches in production.',
-  },
+  { id: 'BF16', label: 'BF16', bytes: 2 },
+  { id: 'FP16', label: 'FP16', bytes: 2 },
+  { id: 'FP32', label: 'FP32', bytes: 4 },
+  { id: 'FP8_E4M3', label: 'FP8 (E4M3)', bytes: 1 },
+  { id: 'FP8_E5M2', label: 'FP8 (E5M2)', bytes: 1 },
+  { id: 'INT8', label: 'INT8', bytes: 1 },
+  { id: 'INT4', label: 'INT4', bytes: 0.5 },
+  { id: 'FP4', label: 'FP4', bytes: 0.5 },
 ]
 
 const DTYPE_BY_ID = new Map(DTYPES.map((dtype) => [dtype.id, dtype]))
@@ -71,7 +51,7 @@ type Rule = { level: SupportLevel; reason: string }
  */
 function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): Rule {
   if (dtype === 'BF16') {
-    return { level: 'supported', reason: 'The default cache dtype nearly everywhere.' }
+    return { level: 'supported', reason: 'The default cache dtype.' }
   }
 
   if (dtype === 'FP16') {
@@ -146,12 +126,15 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
     if (family === 'dsv4') {
       return { level: 'untested', reason: 'The V4 attention kernel targets E4M3.' }
     }
-    return { level: 'untested', reason: 'Supported by some engines, less commonly deployed.' }
+    return { level: 'untested', reason: 'vLLM accepts E5M2, but E4M3 keeps one more mantissa bit, so E4M3 is the usual cache choice.' }
   }
 
   if (dtype === 'INT8') {
     if (family === 'gqa') {
-      return { level: 'untested', reason: 'Available in some engines, not a common default.' }
+      return {
+        level: 'untested',
+        reason: 'Integer caches need extra scale storage, which eats into the memory saving.',
+      }
     }
     return { level: 'unsupported', reason: 'Not supported by the kernels for this architecture.' }
   }

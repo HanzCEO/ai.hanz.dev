@@ -2,7 +2,7 @@ import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toolPath, type Tool } from '@/tools/registry'
 
 export default function ToolCard({ tool }: { tool: Tool }) {
@@ -20,7 +20,6 @@ export default function ToolCard({ tool }: { tool: Tool }) {
             {tool.name}
           </Link>
         </CardTitle>
-        <CardDescription>{tool.tagline}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">{tool.description}</p>

@@ -1018,11 +1018,6 @@ export function computeKvCache(
   if (isBestEffort && computation.bestEffortReason) {
     assumptions.push(computation.bestEffortReason)
   }
-  if (isBestEffort) {
-    assumptions.push(
-      'Best effort results are worth checking against a real measurement before you size hardware on them.',
-    )
-  }
 
   return {
     totalBytes,
