@@ -180,7 +180,10 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
         <Card>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-start gap-3">
-              <HardDrive className="text-muted-foreground mt-0.5 size-4" aria-hidden="true" />
+              <HardDrive
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
                   One expert block is {formatBytes(result.perMoELayerBytes).text}
@@ -221,7 +224,10 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
         <Card>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-start gap-3">
-              <Clock className="text-muted-foreground mt-0.5 size-4" aria-hidden="true" />
+              <Clock
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
                   {formatDuration(result.computeSeconds)} of arithmetic, {formatDuration(result.streamSeconds)}{' '}
@@ -248,7 +254,10 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
         <Card>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-start gap-3">
-              <Scissors className="text-muted-foreground mt-0.5 size-4" aria-hidden="true" />
+              <Scissors
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
                   {formatExact(result.keptExperts)} of {formatExact(shape.routedExperts)} experts kept,
