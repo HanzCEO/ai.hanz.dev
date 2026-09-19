@@ -55,7 +55,7 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
   }
 
   if (dtype === 'FP16') {
-    if (family === 'mla' || family === 'dsv4') {
+    if (family === 'mla' || family === 'dsv4' || family === 'dsv41') {
       return {
         level: 'untested',
         reason: 'MLA kernels are tuned for BF16. FP16 works in theory but is rarely exercised.',
@@ -72,6 +72,20 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
   }
 
   if (role === 'indexer') {
+    if (family === 'dsv41') {
+      if (dtype === 'FP4') {
+        return {
+          level: 'supported',
+          reason: 'V4.1 stores the indexer keys as MXFP4 with one UE8M0 scale per 32 values, the format it was trained with.',
+        }
+      }
+      if (dtype === 'FP8_E4M3') {
+        return {
+          level: 'untested',
+          reason: 'V4.1 moved the indexer cache to FP4. FP8 doubles its footprint and is not the trained format.',
+        }
+      }
+    }
     if (family === 'dsv4') {
       if (dtype === 'FP4') {
         return {
@@ -98,6 +112,12 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
       }
     }
     if (dtype === 'FP8_E4M3' || dtype === 'FP8_E5M2') {
+      if (family === 'dsv41') {
+        return {
+          level: 'untested',
+          reason: 'V4.1 stores indexer keys as MXFP4, so an FP8 indexer cache is off the trained path.',
+        }
+      }
       return { level: 'untested', reason: 'No indexer exists for this architecture family.' }
     }
     if (dtype === 'INT8' || dtype === 'INT4') {
@@ -116,6 +136,12 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
         reason: 'Linear attention state is kept in higher precision, so FP8 is unusual here.',
       }
     }
+    if (family === 'dsv41') {
+      return {
+        level: 'untested',
+        reason: 'V4.1 caches the compressed main KV in FP4. FP8 doubles that footprint, though the indexer keys were FP8 in V4.',
+      }
+    }
     return {
       level: 'supported',
       reason: 'vLLM and SGLang both expose an FP8 (E4M3) KV cache. Verify accuracy first.',
@@ -123,7 +149,7 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
   }
 
   if (dtype === 'FP8_E5M2') {
-    if (family === 'dsv4') {
+    if (family === 'dsv4' || family === 'dsv41') {
       return { level: 'untested', reason: 'The V4 attention kernel targets E4M3.' }
     }
     return { level: 'untested', reason: 'vLLM accepts E5M2, but E4M3 keeps one more mantissa bit, so E4M3 is the usual cache choice.' }
@@ -147,6 +173,12 @@ function ruleFor(family: ArchitectureFamily, role: DtypeRole, dtype: DtypeId): R
   }
 
   if (dtype === 'FP4') {
+    if (family === 'dsv41') {
+      return {
+        level: 'supported',
+        reason: 'V4.1 quantizes the compressed main KV to FP4 (E2M1) with one E4M3 scale per 16 channels, the format it was trained with.',
+      }
+    }
     if (family === 'dsv4') {
       return {
         level: 'untested',

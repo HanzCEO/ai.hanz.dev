@@ -251,8 +251,99 @@ describe('architecture specific handling', () => {
     expect(inner.model_type).toBe('deepseek_v41_text')
 
     const result = computeKvCache(raw, { contextLength: 65536, kvCacheDtype: 'BF16' })
-    expect(result.architecture.family).toBe('dsv4')
+    expect(result.architecture.family).toBe('dsv41')
     expect(result.layerSplit.total).toBe(40)
+  })
+})
+
+describe('DeepSeek V4.1', () => {
+  it('detects V4.1 as its own family, separate from V4', () => {
+    const v41 = computeKvCache(fixture('deepseek-v41-flash'), {
+      contextLength: 1_048_576,
+      kvCacheDtype: 'FP4',
+      indexerDtype: 'FP4',
+    })
+    expect(v41.architecture.family).toBe('dsv41')
+    expect(v41.bestEffort).toBe(false)
+    expect(v41.architecture.modelType).toBe('deepseek_v41')
+
+    for (const name of ['deepseek-v4-pro', 'deepseek-v4-flash']) {
+      const v4 = computeKvCache(fixture(name), { contextLength: 4096, kvCacheDtype: 'BF16' })
+      expect(v4.architecture.family, name).toBe('dsv4')
+    }
+  })
+
+  it('matches the published 890 bytes per token at 1M context with an FP4 cache', () => {
+    // Only kv_source_layer_ids (2, 8, 14, 20) own the global cache. Three of
+    // them sit at ratio 2 and one at ratio 1.
+    //   main KV    512 head_dim, rope dims included
+    //              FP4: 256 payload + 32 scales (one E4M3 per 16) = 288 bytes
+    //              288 / 2 * 3 + 288 = 720 bytes per token
+    //   indexer K  128 index_head_dim
+    //              FP4: 64 payload + 4 scales (one UE8M0 per 32) = 68 bytes
+    //              68 / 2 * 3 + 68 = 170 bytes per token
+    //   720 + 170 = 890 bytes per token
+    const result = computeKvCache(fixture('deepseek-v41-flash'), {
+      contextLength: 1_048_576,
+      sequenceCount: 1,
+      kvCacheDtype: 'FP4',
+      indexerDtype: 'FP4',
+    })
+
+    expect(result.bytesPerToken).toBe(890)
+    expect(result.totalBytes).toBe(933_232_640)
+    expect(result.totalBytes / GiB).toBeLessThan(1)
+    expect(
+      result.components.find((component) => component.id === 'attention')?.bytesPerToken,
+    ).toBe(720)
+    expect(
+      result.components.find((component) => component.id === 'indexer')?.bytesPerToken,
+    ).toBe(170)
+  })
+
+  it('sizes only the source layers, not all 40', () => {
+    const result = computeKvCache(fixture('deepseek-v41-flash'), {
+      contextLength: 1_048_576,
+      kvCacheDtype: 'FP4',
+      indexerDtype: 'FP4',
+    })
+
+    expect(result.layerSplit.total).toBe(40)
+    // One entry per source layer, at its own compression ratio.
+    expect(result.layerSplit.compressed).toEqual([
+      { ratio: 1, layers: 1 },
+      { ratio: 2, layers: 3 },
+    ])
+    expect(result.assumptions.join(' ')).toMatch(/kv_source_layer_ids/)
+    expect(result.assumptions.join(' ')).toMatch(/compress_ratios/)
+  })
+
+  it('carries the FP4 block scales instead of a bare half byte per element', () => {
+    // A naive FP4 figure would be (512 + 128) * 0.5 * (3/2 + 1) = 640 bytes
+    // per token. The scales are what turn that into the published 890.
+    const result = computeKvCache(fixture('deepseek-v41-flash'), {
+      contextLength: 1_048_576,
+      kvCacheDtype: 'FP4',
+      indexerDtype: 'FP4',
+    })
+
+    expect(result.bytesPerToken).toBeGreaterThan(640)
+    expect(result.assumptions.join(' ')).toMatch(/E4M3 scale per 16/)
+    expect(result.assumptions.join(' ')).toMatch(/UE8M0 scale per 32/)
+  })
+
+  it('marks FP4 as supported for both V4.1 dropdowns', () => {
+    const result = computeKvCache(fixture('deepseek-v41-flash'), {
+      contextLength: 1_048_576,
+      kvCacheDtype: 'FP4',
+      indexerDtype: 'FP4',
+    })
+
+    expect(result.dtypeSupport.find((entry) => entry.dtype === 'FP4')?.level).toBe('supported')
+    expect(result.indexerDtypeSupport?.find((entry) => entry.dtype === 'FP4')?.level).toBe(
+      'supported',
+    )
+    expect(supportFor('dsv41', 'kv', 'INT8').level).toBe('unsupported')
   })
 })
 

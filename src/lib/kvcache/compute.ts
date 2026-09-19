@@ -6,6 +6,7 @@ import {
   type ComputeOptions,
   type ComputeResult,
   type ConstantUsed,
+  type DtypeId,
   type DtypeSupport,
   type LayerSplit,
   type RawConfig,
@@ -90,7 +91,15 @@ function dtypeNameToBytes(name: string | undefined): number | undefined {
 // Architecture detection
 // ---------------------------------------------------------------------------
 
-const DSV4_TYPES = new Set(['deepseek_v4', 'deepseek_v41', 'deepseek_v4_text', 'deepseek_v41_text'])
+const DSV4_TYPES = new Set(['deepseek_v4', 'deepseek_v4_text'])
+/**
+ * DeepSeek V4.1 is a different architecture from V4, not a revision of it. It
+ * keeps a Causal Encoder-Decoder stack on top of Compressed Sparse Attention 2,
+ * where only a handful of layers own the global cache and every other layer
+ * reads the nearest owner below it. It is detected before V4 so its configs are
+ * never sized with the V4 formula.
+ */
+const DSV41_TYPES = new Set(['deepseek_v41', 'deepseek_v41_text'])
 const HYBRID_TYPES = new Set([
   'qwen3_next',
   'qwen3_5',
@@ -171,6 +180,7 @@ const FAMILY_LABELS: Record<ArchitectureFamily, string> = {
   mla: 'Multi head latent attention',
   hybrid_linear: 'Hybrid linear attention',
   dsv4: 'Compressed sparse attention (DeepSeek V4)',
+  dsv41: 'Compressed sparse attention 2 (DeepSeek V4.1)',
   unknown: 'Unrecognised architecture',
 }
 
@@ -189,6 +199,17 @@ export function detectArchitecture(inner: RawConfig, outer: RawConfig): Detectio
   const candidates = [modelType, ...architectures].map((value) => value.toLowerCase())
 
   const matches = (set: Set<string>) => candidates.some((value) => set.has(value))
+
+  if (matches(DSV41_TYPES) || readNumberArray(inner, 'kv_source_layer_ids')) {
+    return {
+      family: 'dsv41',
+      modelType,
+      label: FAMILY_LABELS.dsv41,
+      bestEffort: !matches(DSV41_TYPES),
+      reason:
+        'Config carries kv_source_layer_ids, so layers share a compressed global cache owned by a few of them.',
+    }
+  }
 
   if (matches(DSV4_TYPES) || readNumberArray(inner, 'compress_ratios')) {
     return {
@@ -264,7 +285,12 @@ interface FamilyComputation {
   family: ArchitectureFamily
   layerSplit: LayerSplit
   attention: { kinds: LayerKind[]; note?: string }
-  indexer: { bytesPerEntry: number; entriesPerSequence: number; layers: number; formula: string; note?: string } | null
+  indexer: {
+    bytesPerSequence: number
+    formula: string
+    inputs: Array<{ key: string; value: number | string }>
+    note?: string
+  } | null
   state: { bytesPerSequence: number; formula: string; inputs: Array<{ key: string; value: number | string }>; note?: string } | null
   constants: ConstantUsed[]
   assumptions: string[]
@@ -517,10 +543,9 @@ function computeMla(
     }
 
     indexer = {
-      bytesPerEntry: indexHeadDim * indexerBytes,
-      entriesPerSequence: contextLength,
-      layers: indexerLayers,
-      formula: `${indexHeadDim} index_head_dim x ${indexerBytes} bytes`,
+      bytesPerSequence: indexHeadDim * indexerBytes * contextLength * indexerLayers,
+      formula: `${indexerLayers} layers x ${indexHeadDim} index_head_dim x ${indexerBytes} bytes`,
+      inputs: [{ key: 'indexer layers', value: indexerLayers }],
       note,
     }
 
@@ -950,6 +975,204 @@ function computeDsv4(
 }
 
 // ---------------------------------------------------------------------------
+// DeepSeek V4.1
+// ---------------------------------------------------------------------------
+
+/**
+ * Rounding a byte count up to a whole number of bytes. The block scale sizes
+ * below are all exact integers in practice, but the ceiling keeps a config with
+ * an odd dimension from producing a fractional byte count.
+ */
+function ceilBytes(bytes: number): number {
+  return Math.ceil(bytes)
+}
+
+/**
+ * Packed size of one cached entry, in bytes, for a block quantized format.
+ *
+ * Both formats in play store one scale per block on top of the payload, so a
+ * 512 element FP4 entry costs 288 bytes rather than 256:
+ *   FP4 (E2M1)  payload elements / 2, plus one E4M3 scale per 16 elements
+ *   FP8 (E4M3)  payload elements, plus one UE8M0 scale per 32 elements
+ *   BF16        payload elements x 2, no scale
+ * FP16 and the integer widths are treated as plain element formats, since the
+ * engine does not claim a block scaled layout for them.
+ */
+function packedBytesPerEntry(
+  elements: number,
+  bytes: number,
+  kind: 'kv' | 'indexer',
+  dtype: DtypeId,
+): number {
+  if (dtype === 'FP4') {
+    const scaleBytes = kind === 'indexer' ? elements / 32 : elements / 16
+    return ceilBytes((elements * bytes) + scaleBytes)
+  }
+  if (dtype === 'FP8_E4M3' || dtype === 'FP8_E5M2') {
+    return ceilBytes(elements * bytes + elements / 32)
+  }
+  return ceilBytes(elements * bytes)
+}
+
+function computeDsv41(
+  inner: RawConfig,
+  options: ComputeOptions,
+  kvBytes: number,
+  indexerBytes: number,
+): FamilyComputation {
+  const contextLength = options.contextLength
+  const constants: ConstantUsed[] = []
+  const assumptions: string[] = []
+
+  const numLayers = readNumber(inner, 'num_hidden_layers')
+  const headDim = readNumber(inner, 'head_dim')
+  const ropeDim = readNumber(inner, 'qk_rope_head_dim')
+  const ratios = readNumberArray(inner, 'compress_ratios')
+  const sourceIds = readNumberArray(inner, 'kv_source_layer_ids')
+
+  if (!numLayers || !headDim || !ratios || !sourceIds) {
+    throw new KvCacheInputError(
+      'This DeepSeek V4.1 config is missing num_hidden_layers, head_dim, compress_ratios, or kv_source_layer_ids, so the shared compressed cache size cannot be derived from it.',
+    )
+  }
+
+  const rope = ropeDim ?? 64
+  // The cached latent is head_dim wide and already contains the rope dims, so
+  // the rope width is reported for auditing rather than added on top. This is
+  // the 512-channel latent the V4.1 report describes.
+  const mainElements = headDim
+  const indexHeadDim = readNumber(inner, 'index_head_dim') ?? 0
+  const hasIndexer = indexHeadDim > 0 && (readNumber(inner, 'index_n_heads') ?? 0) > 0
+
+  const sources = Array.from(new Set(sourceIds))
+    .filter((id) => id >= 0 && id < numLayers)
+    .sort((a, b) => a - b)
+  if (sources.length === 0) {
+    throw new KvCacheInputError(
+      'kv_source_layer_ids does not name a layer inside this model, so there is no global cache to size.',
+    )
+  }
+
+  const mainBytesPerEntry = packedBytesPerEntry(mainElements, kvBytes, 'kv', options.kvCacheDtype)
+  const indexerBytesPerEntry = hasIndexer
+    ? packedBytesPerEntry(indexHeadDim, indexerBytes, 'indexer', options.indexerDtype)
+    : 0
+
+  constants.push(
+    { key: 'num_hidden_layers', value: numLayers, source: 'config' },
+    { key: 'head_dim', value: headDim, source: 'config' },
+    {
+      key: 'qk_rope_head_dim',
+      value: rope,
+      source: ropeDim === undefined ? 'assumed 64' : 'config',
+    },
+    {
+      key: 'kv_source_layer_ids',
+      value: sources.join(', '),
+      source: 'config',
+    },
+    {
+      key: 'compress_ratios',
+      value: sources
+        .map((id) => `layer ${id}: ${Math.max(1, ratios[id] ?? 1)}`)
+        .join(', '),
+      source: 'config',
+    },
+  )
+
+  assumptions.push(
+    'DeepSeek V4.1 shares one global cache across layers. Only the kv_source_layer_ids layers own it, and the layers between two sources read the cache of the nearest source below them, so those layers add nothing to the size.',
+  )
+  assumptions.push(
+    'Each source entry stands for compress_ratios[layer] tokens, so its per token cost is divided by that ratio.',
+  )
+  if (options.kvCacheDtype === 'FP4') {
+    assumptions.push(
+      `The main cache is packed as FP4 (E2M1) with one E4M3 scale per 16 channels: ${mainElements} elements become ${mainBytesPerEntry} bytes per entry.`,
+    )  }
+  if (hasIndexer && options.indexerDtype === 'FP4') {
+    assumptions.push(
+      `The indexer key cache is packed as FP4 (E2M1) with one UE8M0 scale per 32 values: ${indexHeadDim} elements become ${indexerBytesPerEntry} bytes per entry.`,
+    )
+  }
+  assumptions.push(
+    'Every layer also keeps a sliding window cache of 128 tokens. It is bounded by the window rather than the context length, so it is left out of the figure below.',
+  )
+  if (ratios.length > numLayers) {
+    assumptions.push(
+      `compress_ratios has ${ratios.length} entries for ${numLayers} layers. The extra entries cover the multi token prediction and draft layers, which are not part of the running model's cache.`,
+    )
+  }
+  if (!hasIndexer) {
+    assumptions.push(
+      'No index_head_dim in the config, so the indexer key cache was left out. V4.1 deployments normally keep one.',
+    )
+  }
+
+  const kinds: LayerKind[] = []
+  const grouped = new Map<number, number[]>()
+  for (const id of sources) {
+    const ratio = Math.max(1, ratios[id] ?? 1)
+    const group = grouped.get(ratio) ?? []
+    group.push(id)
+    grouped.set(ratio, group)
+  }
+
+  for (const ratio of Array.from(grouped.keys()).sort((a, b) => a - b)) {
+    const ids = grouped.get(ratio) as number[]
+    kinds.push({
+      label:
+        ratio <= 1
+          ? `uncompressed source layers (${ids.join(', ')})`
+          : `source layers at ratio ${ratio} (${ids.join(', ')})`,
+      bytesPerEntry: mainBytesPerEntry / ratio,
+      entriesPerSequence: contextLength,
+      layers: ids.length,
+      formula:
+        ratio <= 1
+          ? `${mainBytesPerEntry} bytes per entry`
+          : `${mainBytesPerEntry} bytes per entry / ${ratio}`,
+    })
+  }
+
+  let indexer: FamilyComputation['indexer'] = null
+  if (hasIndexer) {
+    const bytesPerSequence = sources.reduce(
+      (total, id) => total + (indexerBytesPerEntry * contextLength) / Math.max(1, ratios[id] ?? 1),
+      0,
+    )
+    constants.push({ key: 'index_head_dim', value: indexHeadDim, source: 'config' })
+    indexer = {
+      bytesPerSequence,
+      formula: `${sources.length} source layers x ${indexerBytesPerEntry} bytes per entry, each divided by its compression ratio`,
+      inputs: [{ key: 'indexer source layers', value: sources.join(', ') }],
+      note: 'The indexer scores the shared main cache, so it is only stored on the kv_source_layer_ids layers.',
+    }
+  }
+
+  return {
+    family: 'dsv41',
+    layerSplit: {
+      total: numLayers,
+      fullAttention: 0,
+      slidingAttention: 0,
+      linearAttention: 0,
+      compressed: countCompressed(sources.map((id) => Math.max(1, ratios[id] ?? 1))),
+    },
+    attention: {
+      kinds,
+      note: 'Only the kv_source_layer_ids layers store a global cache, and each of their entries stands for several tokens.',
+    },
+    indexer,
+    state: null,
+    constants,
+    assumptions,
+    bestEffort: false,
+    steps: [],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
@@ -1007,7 +1230,9 @@ export function computeKvCache(
 
   let computation: FamilyComputation
 
-  if (detection.family === 'dsv4') {
+  if (detection.family === 'dsv41') {
+    computation = computeDsv41(inner, options, kvBytes, indexerBytes)
+  } else if (detection.family === 'dsv4') {
     computation = computeDsv4(inner, options, kvBytes, indexerBytes)
   } else if (detection.family === 'hybrid_linear') {
     computation = computeHybrid(inner, options, kvBytes)
@@ -1054,15 +1279,15 @@ export function computeKvCache(
   })
 
   if (computation.indexer) {
-    const indexerBytesPerSequence = computation.indexer.layers * computation.indexer.bytesPerEntry * computation.indexer.entriesPerSequence
+    const indexerBytesPerSequence = computation.indexer.bytesPerSequence
     components.push({
       id: 'indexer',
       label: 'Indexer key cache',
-      formula: `${computation.indexer.layers} layers x ${computation.indexer.formula}`,
+      formula: computation.indexer.formula,
       bytesPerToken: indexerBytesPerSequence / contextLength,
       bytesPerSequence: indexerBytesPerSequence,
       totalBytes: indexerBytesPerSequence * sequenceCount,
-      inputs: [{ key: 'indexer layers', value: computation.indexer.layers }],
+      inputs: computation.indexer.inputs,
       note: computation.indexer.note,
     })
   }
@@ -1085,9 +1310,15 @@ export function computeKvCache(
   const bytesPerToken = totalBytes / (contextLength * sequenceCount)
 
   const assumptions = [...computation.assumptions]
-  assumptions.push(
-    'This is the logical size of the cache. Engines add their own overhead, for example FP8 block scale factors. vLLM stores 656 bytes per token per layer for DeepSeek-V3.2 where this formula gives 576, the difference being the scale factors.',
-  )
+  if (detection.family === 'dsv41') {
+    assumptions.push(
+      'This is the logical size of the cache. Engines add their own overhead on top, for example page padding or a per block alignment, so treat it as a lower bound on what a deployment reserves.',
+    )
+  } else {
+    assumptions.push(
+      'This is the logical size of the cache. Engines add their own overhead, for example FP8 block scale factors. vLLM stores 656 bytes per token per layer for DeepSeek-V3.2 where this formula gives 576, the difference being the scale factors.',
+    )
+  }
 
   const maxPositionEmbeddings =
     readNumber(inner, 'max_position_embeddings') ?? readNumber(outer, 'max_position_embeddings') ?? null

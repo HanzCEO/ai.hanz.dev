@@ -12,7 +12,7 @@ export type DtypeId =
 
 export type SupportLevel = 'supported' | 'untested' | 'unsupported'
 
-export type ArchitectureFamily = 'gqa' | 'mla' | 'hybrid_linear' | 'dsv4' | 'unknown'
+export type ArchitectureFamily = 'gqa' | 'mla' | 'hybrid_linear' | 'dsv4' | 'dsv41' | 'unknown'
 
 /** A model config as returned by the hub. Fields are read defensively. */
 export type RawConfig = Record<string, unknown>
