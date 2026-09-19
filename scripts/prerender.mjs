@@ -54,7 +54,6 @@ async function main() {
     PRERENDER_WILDCARD,
     PRERENDER_ATTR,
     NOT_FOUND_PATH,
-    getRouteMeta,
     getNotFoundMeta,
   } = await import(pathToFileURL(serverEntry).href)
 
@@ -100,20 +99,20 @@ async function main() {
   )
 
   // Regenerate the sitemap from the same route list the prerender used, so the
-  // two cannot drift apart. The not found page is deliberately absent.
+  // two cannot drift apart. The not found page is deliberately absent. Only
+  // elements the sitemap protocol defines may appear inside <url>, so the page
+  // title lives in the document head alone and never in this file.
   const sitemap = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...PRERENDER_ROUTES.map((route) => {
-      const meta = getRouteMeta(route)
-      return [
+    ...PRERENDER_ROUTES.map((route) =>
+      [
         '  <url>',
         `    <loc>${escapeXml(canonicalUrlFor(route))}</loc>`,
-        `    <title>${escapeXml(meta.title)}</title>`,
         '    <changefreq>monthly</changefreq>',
         '  </url>',
-      ].join('\n')
-    }),
+      ].join('\n'),
+    ),
     '</urlset>',
     '',
   ].join('\n')

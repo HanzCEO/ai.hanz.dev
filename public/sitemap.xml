@@ -2,17 +2,14 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://ai.hanz.dev/</loc>
-    <title>ai.hanz.dev | Tools for AI developers</title>
     <changefreq>monthly</changefreq>
   </url>
   <url>
     <loc>https://ai.hanz.dev/tools/kv-cache-calculator/</loc>
-    <title>KV Cache Calculator | ai.hanz.dev</title>
     <changefreq>monthly</changefreq>
   </url>
   <url>
     <loc>https://ai.hanz.dev/tools/cost-to-reap-calculator/</loc>
-    <title>REAP Duration Calculator | ai.hanz.dev</title>
     <changefreq>monthly</changefreq>
   </url>
 </urlset>
