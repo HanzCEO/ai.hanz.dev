@@ -154,8 +154,8 @@ export default function CalculatorResults({
           <AlertTitle>Best effort estimate</AlertTitle>
           <AlertDescription>
             <p>
-              This architecture is not one the calculator recognises. The shape was inferred from
-              the config fields that were present, so check the number before sizing hardware on it.
+              This architecture is not recognised. The shape was inferred from the config fields
+              present, so check the number before sizing hardware on it.
             </p>
             <div className="mt-3">
               <SupportButton />
@@ -172,8 +172,8 @@ export default function CalculatorResults({
             <p>
               This model lists a maximum of{' '}
               {result.maxPositionEmbeddings?.toLocaleString('en-US')} tokens, and you asked for{' '}
-              {result.contextLength.toLocaleString('en-US')}. The size below assumes the model would
-              accept the longer context.
+              {result.contextLength.toLocaleString('en-US')}. The size below assumes the longer
+              context is accepted.
             </p>
           </AlertDescription>
         </Alert>

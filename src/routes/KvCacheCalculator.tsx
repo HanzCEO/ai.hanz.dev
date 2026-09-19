@@ -89,9 +89,8 @@ export default function KvCacheCalculator() {
       <header className="flex max-w-2xl flex-col gap-3">
         <h1 className="text-2xl font-medium tracking-tight">KV Cache Calculator</h1>
         <p className="text-muted-foreground">
-          Work out how much memory the KV cache takes for a given model, context length, and number
-          of sequences. The model config is fetched from HuggingFace or ModelScope, so the answer
-          follows the real architecture instead of a hardcoded table.
+          Size the cache for a model, a context length, and a sequence count. The config is read
+          from HuggingFace or ModelScope, so the answer follows the real architecture.
         </p>
       </header>
 

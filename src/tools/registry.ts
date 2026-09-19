@@ -23,7 +23,7 @@ export const tools: Tool[] = [
     name: 'KV Cache Calculator',
     tagline: 'How much memory the cache will actually take',
     description:
-      'Reads the model config straight from HuggingFace or ModelScope and sizes the KV cache for your context length and sequence count. Handles grouped query attention, MLA, hybrid linear attention, and DeepSeek sparse attention.',
+      'Sizes the cache from the real model config, not a hardcoded table. Covers grouped query attention, MLA, hybrid linear attention, and sparse attention.',
     icon: Calculator,
     status: 'ready',
   },

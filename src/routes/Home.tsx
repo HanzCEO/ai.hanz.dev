@@ -7,8 +7,7 @@ export default function Home() {
       <section className="flex max-w-2xl flex-col gap-3">
         <h1 className="text-2xl font-medium tracking-tight">Tools for AI developers</h1>
         <p className="text-muted-foreground">
-          Small calculators and inspectors for the parts of model serving that are annoying to
-          reason about by hand. Everything runs in your browser, and every number shows its work.
+          Small calculators for the fiddly parts of model serving. Every number shows its work.
         </p>
       </section>
 

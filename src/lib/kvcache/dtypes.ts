@@ -12,7 +12,7 @@ export const DTYPES: DtypeSpec[] = [
     id: 'FP32',
     label: 'FP32',
     bytes: 4,
-    note: 'Unquantized. Doubles the cache for no accuracy you actually need.',
+    note: 'Unquantized, so double the cache. Rarely worth it.',
   },
   {
     id: 'FP8_E4M3',

@@ -89,7 +89,7 @@ export default function CalculatorForm({
               Reading the config
             </>
           )}
-          {configState.status === 'idle' && 'Pick a model to start. Suggestions appear as you type.'}
+          {configState.status === 'idle' && 'Type a model id, or pick a suggestion.'}
           {configState.status === 'ready' && detected && (
             <>
               {detected.architecture.label} · {detected.layerSplit.total} layers ·{' '}
