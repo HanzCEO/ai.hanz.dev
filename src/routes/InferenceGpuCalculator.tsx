@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 
-import { formatBytes, formatExact } from '@/lib/format'
 import {
   INFERENCE_FAQ,
   InferenceInputError,
@@ -18,6 +17,7 @@ import CalculatorForm from '@/tools/kv-cache-calculator/CalculatorForm'
 import CalculatorResults from '@/tools/kv-cache-calculator/CalculatorResults'
 import { useKvCacheLayer } from '@/tools/kv-cache-calculator/useKvCacheLayer'
 
+import { describeCacheStep } from '@/tools/inference-gpu-calculator/cacheSummary'
 import InferenceForm from '@/tools/inference-gpu-calculator/InferenceForm'
 import InferenceLayers from '@/tools/inference-gpu-calculator/InferenceLayers'
 import InferenceResults from '@/tools/inference-gpu-calculator/InferenceResults'
@@ -116,20 +116,9 @@ export default function InferenceGpuCalculator() {
   // model they typed rather than the model_type inside the config.
   const modelLabel = inputs.mode === 'hub' ? inputs.modelId : shape?.modelType
 
-  const cacheSummary = cacheResult ? (
-    <>
-      <span className="text-foreground font-medium">{inputs.modelId}</span> at{' '}
-      {formatExact(cacheResult.contextLength)} tokens and{' '}
-      {formatExact(cacheResult.sequenceCount)}{' '}
-      {cacheResult.sequenceCount === 1 ? 'sequence' : 'sequences'} holds a cache of{' '}
-      <span className="text-foreground font-medium">
-        {formatBytes(cacheResult.totalBytes).text}
-      </span>{' '}
-      in {inputs.kvCacheDtype}. Reopen step 1 to change the model, the context, the sequences, or the cache dtype.
-    </>
-  ) : (
-    'Enter a model, a context length, and a sequence count to size the cache.'
-  )
+  const cacheSummary = cacheResult
+    ? describeCacheStep(cacheResult, inputs.modelId, inputs.kvCacheDtype)
+    : 'Enter a model, a context length, and a sequence count to size the cache.'
 
   return (
     <div className="flex flex-col gap-10">

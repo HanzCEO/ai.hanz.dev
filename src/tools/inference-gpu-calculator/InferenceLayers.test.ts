@@ -3,10 +3,12 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { estimateInference } from '@/lib/inference'
+import { formatBytes } from '@/lib/format'
 import { computeKvCache } from '@/lib/kvcache'
 import { detectModelShape } from '@/lib/model-shape'
 import { loadConfigFixture } from '@/test/fixtures'
 
+import { describeCacheStep } from './cacheSummary'
 import InferenceLayers from './InferenceLayers'
 
 const QWEN3_8B = loadConfigFixture('qwen3-8b')
@@ -103,6 +105,50 @@ describe('InferenceLayers', () => {
       expect(html).not.toContain('\u2014')
       expect(html).not.toContain('\u2013')
     }
+  })
+})
+
+describe('the collapsed cache summary', () => {
+  const config = loadConfigFixture('qwen3-8b')
+
+  it('names the model, the context, the sequences, the dtype and the size', () => {
+    const result = computeKvCache(config, {
+      contextLength: 32768,
+      sequenceCount: 4,
+      kvCacheDtype: 'FP8_E4M3',
+      indexerDtype: 'FP8_E4M3',
+    })
+    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'FP8_E4M3')
+    expect(summary).toContain('Qwen/Qwen3-8B')
+    expect(summary).toContain('32,768 tokens')
+    expect(summary).toContain('4 sequences')
+    expect(summary).toContain('FP8_E4M3')
+    expect(summary).toContain(formatBytes(result.totalBytes).text)
+    expect(summary).toContain('Reopen step 1')
+  })
+
+  it('says sequence rather than sequences for one', () => {
+    const result = computeKvCache(config, {
+      contextLength: 8192,
+      sequenceCount: 1,
+      kvCacheDtype: 'BF16',
+      indexerDtype: 'BF16',
+    })
+    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'BF16')
+    expect(summary).toContain('1 sequence ')
+    expect(summary).not.toContain('1 sequences')
+  })
+
+  it('uses no em dash or en dash', () => {
+    const result = computeKvCache(config, {
+      contextLength: 8192,
+      sequenceCount: 1,
+      kvCacheDtype: 'BF16',
+      indexerDtype: 'BF16',
+    })
+    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'BF16')
+    expect(summary).not.toContain('\u2014')
+    expect(summary).not.toContain('\u2013')
   })
 })
 
