@@ -1,23 +1,11 @@
-import { PROVIDER_LIST } from '@/lib/kvcache'
 import type { InferenceInputField, InferencePrecision } from '@/lib/inference'
-import {
-  ConfigPasteField,
-  ModelIdField,
-  ProviderPicker,
-  TokenField,
-} from '@/components/model-source/ModelSourceFields'
+import ModelSourcePicker from '@/components/model-source/ModelSourcePicker'
+import { MODEL_PRESETS } from '@/components/model-source/presets'
 import NumberField from '@/components/ui/number-field'
 import SegmentedControl from '@/components/ui/segmented'
 
-import { MODEL_PRESETS } from './presets'
 import type { InferenceShapeState } from './useInferenceShape'
-import type { InferenceFormInputs, InputMode } from './useInferenceState'
-
-const MODE_LABELS: Array<{ id: InputMode; label: string; hint: string }> = [
-  { id: 'hub', label: 'Model id', hint: 'Read the config from HuggingFace or ModelScope.' },
-  { id: 'paste', label: 'Paste config', hint: 'Paste a config.json that you already have.' },
-  { id: 'manual', label: 'Enter numbers', hint: 'Enter the model values yourself.' },
-]
+import type { InferenceFormInputs } from './useInferenceState'
 
 /**
  * The two precisions, with the one fact that decides the answer.
@@ -38,20 +26,6 @@ const PRECISION_OPTIONS: Array<{ id: InferencePrecision; label: string; hint: st
     hint: 'Two bytes for each weight. A wide exponent range, so it is the safer choice for a large model. The memory footprint is the same as FP16.',
   },
 ]
-
-const TIE_OPTIONS: Array<{ id: InferenceFormInputs['tieEmbeddings']; label: string; hint: string }> =
-  [
-    {
-      id: 'untied',
-      label: 'Separate head',
-      hint: 'The embedding and the language model head are 2 separate tables. Most models do this.',
-    },
-    {
-      id: 'tied',
-      label: 'Tied head',
-      hint: 'The embedding and the language model head share 1 table, so the checkpoint is smaller by 1 embedding table.',
-    },
-  ]
 
 interface InferenceFormProps {
   inputs: InferenceFormInputs
@@ -79,164 +53,30 @@ export default function InferenceForm({
   headroomError,
   maxGpusError,
 }: InferenceFormProps) {
-  const providerSpec = PROVIDER_LIST.find((spec) => spec.id === inputs.provider)
   const shape = shapeState.shape
 
   return (
     <form className="flex flex-col gap-6" onSubmit={(event) => event.preventDefault()}>
-      <SegmentedControl
-        legend="Model source"
-        options={MODE_LABELS}
-        value={inputs.mode}
-        onValueChange={(mode) => update({ mode })}
-        wrap
+      <ModelSourcePicker
+        idPrefix="inference"
+        inputs={inputs}
+        update={update}
+        status={shapeState.status}
+        presets={MODEL_PRESETS}
+        idleHint="Type a model id for the model you want to serve."
+        errorHint="The calculator cannot read that config."
+        summary={
+          shape && (
+            <>
+              {shape.modelType} · {shape.numLayers} layers ·{' '}
+              {shape.hiddenSize.toLocaleString('en-US')} hidden
+              {shape.moeLayers > 0
+                ? ` · ${shape.routedExperts} experts, ${shape.expertsPerToken} for each token`
+                : ''}
+            </>
+          )
+        }
       />
-
-      {inputs.mode === 'hub' && (
-        <>
-          <ProviderPicker
-            value={inputs.provider}
-            onValueChange={(provider) => update({ provider })}
-          />
-
-          <ModelIdField
-            id="inference-model-id"
-            listId="inference-model-presets"
-            value={inputs.modelId}
-            onChange={(modelId) => update({ modelId })}
-            status={shapeState.status}
-            presets={MODEL_PRESETS}
-            idleHint="Type a model id for the model you want to serve."
-            errorHint="The calculator cannot read that config."
-            summary={
-              shape && (
-                <>
-                  {shape.modelType} · {shape.numLayers} layers ·{' '}
-                  {shape.hiddenSize.toLocaleString('en-US')} hidden
-                  {shape.moeLayers > 0
-                    ? ` · ${shape.routedExperts} experts, ${shape.expertsPerToken} for each token`
-                    : ''}
-                </>
-              )
-            }
-          />
-
-          <TokenField
-            id="inference-token"
-            label={providerSpec?.tokenLabel ?? 'token'}
-            value={inputs.token}
-            onChange={(token) => update({ token })}
-            hint={providerSpec?.tokenHint}
-          />
-        </>
-      )}
-
-      {inputs.mode === 'paste' && (
-        <ConfigPasteField
-          id="inference-config-text"
-          value={inputs.configText}
-          onChange={(configText) => update({ configText })}
-          placeholder='{ "model_type": "qwen3", "num_hidden_layers": 36, ... }'
-        />
-      )}
-
-      {inputs.mode === 'manual' && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <NumberField
-              id="inference-hidden"
-              label="hidden_size"
-              min={1}
-              value={inputs.hiddenSize}
-              onChange={(hiddenSize) => update({ hiddenSize })}
-            />
-            <NumberField
-              id="inference-ffn"
-              label="intermediate_size"
-              hint="The width of the dense feed forward block."
-              min={1}
-              value={inputs.intermediateSize}
-              onChange={(intermediateSize) => update({ intermediateSize })}
-            />
-            <NumberField
-              id="inference-layers"
-              label="num_hidden_layers"
-              min={1}
-              value={inputs.numLayers}
-              onChange={(numLayers) => update({ numLayers })}
-            />
-            <NumberField
-              id="inference-vocab"
-              label="vocab_size"
-              hint="This value sets the size of the embedding table."
-              min={1}
-              value={inputs.vocabSize}
-              onChange={(vocabSize) => update({ vocabSize })}
-            />
-            <NumberField
-              id="inference-heads"
-              label="num_attention_heads"
-              min={1}
-              value={inputs.attentionHeads}
-              onChange={(attentionHeads) => update({ attentionHeads })}
-            />
-            <NumberField
-              id="inference-kv-heads"
-              label="num_key_value_heads"
-              hint="Fewer than the attention heads means grouped query attention, so the cache is smaller."
-              min={1}
-              value={inputs.kvHeads}
-              onChange={(kvHeads) => update({ kvHeads })}
-            />
-            <NumberField
-              id="inference-head-dim"
-              label="head_dim"
-              min={1}
-              value={inputs.headDim}
-              onChange={(headDim) => update({ headDim })}
-            />
-            <NumberField
-              id="inference-experts"
-              label="routed experts"
-              hint="Use 0 for a dense model."
-              min={0}
-              value={inputs.routedExperts}
-              onChange={(routedExperts) => update({ routedExperts })}
-            />
-            <NumberField
-              id="inference-topk"
-              label="experts per token"
-              hint="The router top-k. This value sets the weights one token reads."
-              min={0}
-              value={inputs.expertsPerToken}
-              onChange={(expertsPerToken) => update({ expertsPerToken })}
-            />
-            <NumberField
-              id="inference-expert-ffn"
-              label="moe_intermediate_size"
-              hint="The width of one expert."
-              min={0}
-              value={inputs.moeIntermediateSize}
-              onChange={(moeIntermediateSize) => update({ moeIntermediateSize })}
-            />
-            <NumberField
-              id="inference-moe-layers"
-              label="layers with experts"
-              min={0}
-              value={inputs.moeLayers}
-              onChange={(moeLayers) => update({ moeLayers })}
-            />
-          </div>
-
-          <SegmentedControl
-            legend="Embedding and head"
-            options={TIE_OPTIONS}
-            value={inputs.tieEmbeddings}
-            onValueChange={(tieEmbeddings) => update({ tieEmbeddings })}
-            wrap
-          />
-        </>
-      )}
 
       <SegmentedControl
         legend="Precision"

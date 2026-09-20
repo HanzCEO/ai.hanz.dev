@@ -13,10 +13,9 @@
  *
  * Notes describe the cache shape the engine detects, not the weights.
  */
-export interface ModelPreset {
-  id: string
-  note: string
-}
+import type { ModelPreset } from './ModelSourceFields'
+
+export type { ModelPreset }
 
 export const MODEL_PRESETS: ModelPreset[] = [
   // Frontier open-weight models, strongest first.

@@ -9,7 +9,9 @@ import {
   PRECISIONS,
   type InferencePrecision,
 } from '@/lib/inference'
+import { MANUAL_DEFAULTS, type ManualShapeInputs } from '@/lib/model-config'
 import type { Provider } from '@/lib/kvcache'
+import { DEFAULT_MODEL_ID } from '@/lib/use-config-source'
 import {
   decimalOrNull,
   digitsOrNull,
@@ -22,7 +24,7 @@ import {
 /** Where the model shape comes from. */
 export type InputMode = 'hub' | 'paste' | 'manual'
 
-export interface InferenceFormInputs {
+export interface InferenceFormInputs extends ManualShapeInputs {
   mode: InputMode
 
   // Hub mode.
@@ -70,25 +72,12 @@ export interface InferenceFormInputs {
 /**
  * Qwen3-8B, so manual entry opens on a real model rather than on zeros.
  *
- * hidden 4096, 36 blocks, a dense width of 12288, a vocabulary of 151936, 32
- * attention heads and 8 key and value heads at a head width of 128, untied.
+ * Declared once, beside the manual reader that consumes it, and re-exported
+ * here so the page does not have to reach into two modules for one form.
  */
-export const MANUAL_DEFAULTS = {
-  hiddenSize: '4096',
-  intermediateSize: '12288',
-  numLayers: '36',
-  vocabSize: '151936',
-  attentionHeads: '32',
-  kvHeads: '8',
-  headDim: '128',
-  routedExperts: '0',
-  expertsPerToken: '0',
-  moeIntermediateSize: '0',
-  moeLayers: '0',
-  tieEmbeddings: 'untied' as const,
-}
+export { MANUAL_DEFAULTS }
 
-export const DEFAULT_MODEL_ID = 'Qwen/Qwen3-8B'
+export { DEFAULT_MODEL_ID }
 
 const DEFAULTS: InferenceFormInputs = {
   mode: 'hub',

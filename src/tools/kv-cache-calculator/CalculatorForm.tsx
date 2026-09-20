@@ -1,8 +1,8 @@
-import { ModelIdField, ProviderPicker, TokenField } from '@/components/model-source/ModelSourceFields'
+import ModelSourcePicker from '@/components/model-source/ModelSourcePicker'
+import { MODEL_PRESETS } from '@/components/model-source/presets'
 import { Input } from '@/components/ui/input'
-import { PROVIDER_LIST, type ComputeResult } from '@/lib/kvcache'
+import type { ComputeResult } from '@/lib/kvcache'
 import DtypeSelect from '@/tools/kv-cache-calculator/DtypeSelect'
-import { MODEL_PRESETS } from '@/tools/kv-cache-calculator/presets'
 import type { ModelConfigState } from '@/lib/use-model-config'
 import type { CalculatorInputs } from '@/tools/kv-cache-calculator/useCalculatorState'
 
@@ -25,22 +25,15 @@ export default function CalculatorForm({
   sequenceError,
   onUseMaxContext,
 }: CalculatorFormProps) {
-  const providerSpec = PROVIDER_LIST.find((spec) => spec.id === inputs.provider)
   const detected = configState.status === 'ready' ? result : null
   const showIndexer = detected?.indexerDtypeSupport != null
 
   return (
     <form className="flex flex-col gap-6" onSubmit={(event) => event.preventDefault()}>
-      <ProviderPicker
-        value={inputs.provider}
-        onValueChange={(provider) => update({ provider })}
-      />
-
-      <ModelIdField
-        id="model-id"
-        listId="model-presets"
-        value={inputs.modelId}
-        onChange={(modelId) => update({ modelId })}
+      <ModelSourcePicker
+        idPrefix="kv"
+        inputs={inputs}
+        update={update}
         status={configState.status}
         presets={MODEL_PRESETS}
         summary={
@@ -128,14 +121,6 @@ export default function CalculatorForm({
           support={detected.indexerDtypeSupport}
         />
       )}
-
-      <TokenField
-        id="provider-token"
-        label={providerSpec?.tokenLabel ?? 'token'}
-        value={inputs.token}
-        onChange={(token) => update({ token })}
-        hint={providerSpec?.tokenHint}
-      />
     </form>
   )
 }
