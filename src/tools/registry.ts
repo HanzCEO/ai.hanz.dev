@@ -1,4 +1,4 @@
-import { Calculator, Scissors, Sparkles, type LucideIcon } from 'lucide-react'
+import { Calculator, Cpu, Scissors, Sparkles, type LucideIcon } from 'lucide-react'
 
 export type ToolStatus = 'ready' | 'planned'
 
@@ -38,6 +38,14 @@ export const tools: Tool[] = [
     description:
       'Estimates the cost of training a DSpark speculative-decoding drafter against a custom target model: the size of the target hidden state cache, the length of the run, and whether it fits in VRAM.',
     icon: Sparkles,
+    status: 'ready',
+  },
+  {
+    slug: 'inference-gpu-calculator',
+    name: 'Inference GPU Calculator',
+    description:
+      'Finds the smallest GPU configuration that serves a model in FP16 or BF16, from the resident weights, the KV cache, the activation buffer, and the framework reserve.',
+    icon: Cpu,
     status: 'ready',
   },
 ]

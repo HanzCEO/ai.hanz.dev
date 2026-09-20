@@ -1,5 +1,6 @@
 import { REAP_FAQ } from './reap/faq'
 import { DSPARK_FAQ } from './dspark/faq'
+import { INFERENCE_FAQ } from './inference/faq'
 import type { FaqItem } from './faq'
 
 /**
@@ -37,6 +38,7 @@ export interface RouteMeta {
 export const KV_CACHE_PATH = '/tools/kv-cache-calculator/'
 export const REAP_PATH = '/tools/cost-to-reap-calculator/'
 export const DSPARK_PATH = '/tools/dspark-training-cost-calculator/'
+export const INFERENCE_PATH = '/tools/inference-gpu-calculator/'
 
 const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
 const REAP_DESCRIPTION =
@@ -45,6 +47,10 @@ const REAP_DESCRIPTION =
 const DSPARK_TITLE = 'DSpark Training Cost Calculator | ai.hanz.dev'
 const DSPARK_DESCRIPTION =
   'DSpark training cost calculator. Estimate the target hidden state cache size, the training duration, and the VRAM a speculative-decoding drafter needs for any target model.'
+
+const INFERENCE_TITLE = 'Inference GPU Calculator | ai.hanz.dev'
+const INFERENCE_DESCRIPTION =
+  'Inference GPU calculator for FP16 and BF16. Find the resident weight size, the KV cache size, and the smallest GPU configuration that holds a model at your context length and sequence count.'
 
 export const ROUTE_META: RouteMeta[] = [
   {
@@ -85,6 +91,19 @@ export const ROUTE_META: RouteMeta[] = [
         description: DSPARK_DESCRIPTION,
       }),
       faqJsonLd(DSPARK_FAQ),
+    ),
+  },
+  {
+    path: INFERENCE_PATH,
+    title: INFERENCE_TITLE,
+    description: INFERENCE_DESCRIPTION,
+    jsonLd: jsonLdGraph(
+      softwareApplicationJsonLd({
+        path: INFERENCE_PATH,
+        title: INFERENCE_TITLE,
+        description: INFERENCE_DESCRIPTION,
+      }),
+      faqJsonLd(INFERENCE_FAQ),
     ),
   },
 ]
