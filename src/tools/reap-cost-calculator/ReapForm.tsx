@@ -7,6 +7,7 @@ import {
   type WeightDtype,
 } from '@/lib/reap'
 import NumberField from '@/components/ui/number-field'
+import Marquee from '@/components/ui/marquee'
 import { PROVIDER_LIST } from '@/lib/kvcache'
 import {
   Select,
@@ -231,11 +232,11 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
               {CALIBRATION_PRESETS.map((entry) => (
                 <SelectItem key={entry.id} value={entry.id}>
                   <span className="flex w-full flex-col items-start gap-0.5">
-                    <span>
+                    <Marquee className="w-full">
                       {entry.label} · {entry.samples.toLocaleString('en-US')} x{' '}
                       {entry.sequenceLength.toLocaleString('en-US')}
-                    </span>
-                    <span className="text-muted-foreground text-xs">{entry.note}</span>
+                    </Marquee>
+                    <Marquee className="text-muted-foreground w-full text-xs">{entry.note}</Marquee>
                   </span>
                 </SelectItem>
               ))}
@@ -331,8 +332,8 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
               {STORAGE_PRESETS.map((entry) => (
                 <SelectItem key={entry.id} value={entry.id}>
                   <span className="flex w-full items-center justify-between gap-4">
-                    <span>{entry.label}</span>
-                    <span className="text-muted-foreground text-xs tabular-nums">
+                    <Marquee>{entry.label}</Marquee>
+                    <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                       {entry.bandwidthGBs} GB/s
                     </span>
                   </span>

@@ -7,6 +7,7 @@ import {
 } from '@/lib/kvcache'
 
 import SupportTag from '@/components/ui/support-tag'
+import Marquee from '@/components/ui/marquee'
 import {
   Select,
   SelectContent,
@@ -65,8 +66,8 @@ export default function DtypeSelect({
             return (
               <SelectItem key={dtype.id} value={dtype.id}>
                 <span className="flex w-full items-center justify-between gap-4">
-                  <span>{dtype.label}</span>
-                  {entry && <SupportTag level={entry.level} />}
+                  <Marquee>{dtype.label}</Marquee>
+                  {entry && <SupportTag level={entry.level} className="shrink-0" />}
                 </span>
               </SelectItem>
             )

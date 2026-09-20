@@ -128,3 +128,39 @@
     @apply font-sans;
     }
 }
+
+/* Marquee. A line that overflows its box slides back and forth, which is how a
+   capped dropdown row stays readable without stretching the popup. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
+}
+
+/* Only the overflowing lines animate, and they hold still until the row they
+   sit in is being read. */
+[data-slot='marquee'][data-overflow='true'] [data-slot='marquee-inner'] {
+  animation: marquee-scroll var(--marquee-duration, 6s) linear infinite alternate;
+  animation-play-state: paused;
+}
+
+[data-slot='select-item']:hover [data-slot='marquee'][data-overflow='true'] [data-slot='marquee-inner'],
+[data-slot='select-item'][data-highlighted] [data-slot='marquee'][data-overflow='true'] [data-slot='marquee-inner'],
+[data-slot='select-trigger']:hover [data-slot='marquee'][data-overflow='true'] [data-slot='marquee-inner'],
+[data-slot='select-trigger']:focus-visible [data-slot='marquee'][data-overflow='true'] [data-slot='marquee-inner'] {
+  animation-play-state: running;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='marquee'][data-overflow='true'] [data-slot='marquee-inner'] {
+    animation: none;
+  }
+
+  /* Without the animation the line has to be reachable another way. */
+  [data-slot='marquee'][data-overflow='true'] {
+    overflow-x: auto;
+  }
+}

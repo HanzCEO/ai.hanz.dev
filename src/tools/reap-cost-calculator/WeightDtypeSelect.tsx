@@ -3,6 +3,7 @@ import type { GpuSpec } from '@/lib/hardware'
 import type { SupportLevel } from '@/lib/support'
 
 import SupportTag from '@/components/ui/support-tag'
+import Marquee from '@/components/ui/marquee'
 import {
   Select,
   SelectContent,
@@ -83,8 +84,8 @@ export default function WeightDtypeSelect({
             return (
               <SelectItem key={spec.id} value={spec.id}>
                 <span className="flex w-full items-center justify-between gap-4">
-                  <span>{spec.label}</span>
-                  <SupportTag level={tag.level} />
+                  <Marquee>{spec.label}</Marquee>
+                  <SupportTag level={tag.level} className="shrink-0" />
                 </span>
               </SelectItem>
             )

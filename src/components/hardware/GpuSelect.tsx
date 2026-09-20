@@ -1,5 +1,6 @@
 import { GPU_PRESETS, GPU_VENDOR_LABELS, GPU_VENDORS, findGpu } from '@/lib/hardware'
 
+import Marquee from '@/components/ui/marquee'
 import {
   Select,
   SelectContent,
@@ -44,8 +45,8 @@ export default function GpuSelect({ id, value, onValueChange }: GpuSelectProps) 
             {GPU_PRESETS.filter((gpu) => gpu.vendor === vendor).map((gpu) => (
               <SelectItem key={gpu.id} value={gpu.id}>
                 <span className="flex w-full items-center justify-between gap-4">
-                  <span>{gpu.label}</span>
-                  <span className="text-muted-foreground text-xs tabular-nums">
+                  <Marquee>{gpu.label}</Marquee>
+                  <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                     {gpu.vramGiB} GB
                   </span>
                 </span>
