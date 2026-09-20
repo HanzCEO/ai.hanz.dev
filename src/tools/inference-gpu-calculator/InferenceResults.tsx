@@ -3,14 +3,15 @@ import { useCallback, useState } from 'react'
 
 import { formatBytes, formatExact } from '@/lib/format'
 import type { InferenceCandidate, InferenceResult } from '@/lib/inference'
+import type { ModelShape } from '@/lib/model-shape'
 import { SUPPORT_URL } from '@/lib/seo'
+import type { ConfigSourceState } from '@/lib/use-config-source'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
 import InferenceBreakdown from './InferenceBreakdown'
-import type { InferenceShapeState } from './useInferenceShape'
 
 const VERDICT_LABEL: Record<InferenceResult['verdict'], string> = {
   single: 'One card',
@@ -38,7 +39,9 @@ function formatRate(tokensPerSecond: number): string {
 
 interface InferenceResultsProps {
   result: InferenceResult | null
-  shapeState: InferenceShapeState
+  configState: ConfigSourceState
+  /** The shape read from the config, or null while there is none to read. */
+  shape: ModelShape | null
   computeError: string | null
   /** The model as the reader named it. Falls back to the config model_type. */
   modelLabel?: string
@@ -46,7 +49,8 @@ interface InferenceResultsProps {
 
 export default function InferenceResults({
   result,
-  shapeState,
+  configState,
+  shape: detectedShape,
   computeError,
   modelLabel,
 }: InferenceResultsProps) {
@@ -70,7 +74,7 @@ export default function InferenceResults({
     }
   }, [result, modelLabel])
 
-  if (shapeState.status === 'idle') {
+  if (configState.status === 'idle') {
     return (
       <Card>
         <CardContent className="text-muted-foreground py-10 text-center text-sm">
@@ -80,7 +84,7 @@ export default function InferenceResults({
     )
   }
 
-  if (shapeState.status === 'loading') {
+  if (configState.status === 'loading') {
     return (
       <Card>
         <CardContent
@@ -94,13 +98,28 @@ export default function InferenceResults({
     )
   }
 
-  if (shapeState.status === 'error') {
+  if (configState.status === 'error') {
     return (
       <Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>The calculator cannot read that config</AlertTitle>
         <AlertDescription>
-          <p>{shapeState.error}</p>
+          <p>{configState.error?.message ?? 'The calculator cannot read that model config.'}</p>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (!detectedShape) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle />
+        <AlertTitle>The calculator cannot size that config</AlertTitle>
+        <AlertDescription>
+          <p>
+            The config describes no transformer with a hidden size and a depth. The calculator
+            therefore has nothing to size.
+          </p>
         </AlertDescription>
       </Alert>
     )
@@ -230,6 +249,10 @@ export default function InferenceResults({
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">KV cache</dt>
               <dd className="tabular-nums">{formatBytes(result.kvCacheBytes).text}</dd>
+            </div>
+            <div className="flex flex-col">
+              <dt className="text-muted-foreground text-xs">Cache dtype</dt>
+              <dd className="tabular-nums">{result.kvCacheDtype}</dd>
             </div>
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">Cache for each token</dt>

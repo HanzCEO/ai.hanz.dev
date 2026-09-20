@@ -79,12 +79,15 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
 
   // The KV cache shape is read from the config by the shared engine, so a
   // grouped query model, a latent attention model, and a hybrid linear model
-  // each get their own formula rather than one approximation.
+  // each get their own formula rather than one approximation. The cache dtype
+  // is the cache layer's choice and defaults to the weight precision.
+  const kvCacheDtype = inputs.kvCacheDtype ?? precision
+  const indexerDtype = inputs.indexerDtype ?? precision
   const kv = computeKvCache(inputs.config, {
     contextLength,
     sequenceCount: sequences,
-    kvCacheDtype: precision,
-    indexerDtype: precision,
+    kvCacheDtype,
+    indexerDtype,
   })
   const kvCacheBytes = kv.totalBytes
   const kvBytesPerToken = kv.bytesPerToken
@@ -206,7 +209,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     },
     {
       label: 'KV cache',
-      detail: `${kv.architecture.label}. At ${formatExact(contextLength)} tokens for each of ${formatExact(sequences)} ${sequences === 1 ? 'sequence' : 'sequences'}, one token in one sequence needs ${formatExact(kvBytesPerToken)} bytes. The whole cache needs ${formatBytes(kvCacheBytes).text}.`,
+      detail: `${kv.architecture.label}. At ${formatExact(contextLength)} tokens for each of ${formatExact(sequences)} ${sequences === 1 ? 'sequence' : 'sequences'}, one token in one sequence needs ${formatExact(kvBytesPerToken)} bytes. The whole cache needs ${formatBytes(kvCacheBytes).text} in ${kvCacheDtype}.`,
     },
     {
       label: 'Activation buffer',
@@ -259,6 +262,16 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     },
     { key: 'precision', value: precision, source: 'the precision the model is served in' },
     { key: 'bytes_per_weight', value: bytesPerWeight, source: 'FP16 and BF16 are both 2 bytes' },
+    {
+      key: 'kv_cache_dtype',
+      value: kvCacheDtype,
+      source: 'the dtype the cache layer holds the KV cache in',
+    },
+    {
+      key: 'indexer_dtype',
+      value: indexerDtype,
+      source: 'the dtype the cache layer holds a sparse indexer cache in',
+    },
     { key: 'context_length', value: contextLength, source: 'tokens in each sequence' },
     { key: 'sequences', value: sequences, source: 'sequences served at the same time' },
     { key: 'kv_bytes_per_token', value: kvBytesPerToken, source: `the ${kv.architecture.label} cache shape, for one token in one sequence` },
@@ -284,6 +297,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     'The parameter count comes from the config. Norms and biases are left out, because they are a fraction of a percent of the weights.',
     'The model is served in FP16 or BF16 with no quantization. A quantized checkpoint is smaller and needs less hardware.',
     'The KV cache figure is the logical size of the cache. A serving engine adds its own overhead on top, for example page padding or per block alignment.',
+    'The KV cache dtype is set in the cache layer and not by the weight precision. A narrower cache dtype lowers the cache size and therefore the VRAM. It never lowers the weight size, because the weights are still served in FP16 or BF16.',
     ...kv.assumptions,
   ]
 
@@ -298,6 +312,8 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     shape,
     precision,
     bytesPerWeight,
+    kvCacheDtype,
+    indexerDtype,
     contextLength,
     sequences,
     maxGpus,

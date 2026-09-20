@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest'
 import { estimateInference, type InferenceInputs, type InferenceResult } from '@/lib/inference'
 import type { RawConfig } from '@/lib/model-config'
 import { detectModelShape } from '@/lib/model-shape'
+import type { ConfigSourceState } from '@/lib/use-config-source'
 import { loadConfigFixture } from '@/test/fixtures'
 
 import InferenceResults from './InferenceResults'
-import type { InferenceShapeState } from './useInferenceShape'
 
 const QWEN3_8B = loadConfigFixture('qwen3-8b')
 
@@ -40,27 +40,24 @@ function inputs(config: RawConfig, overrides: Partial<InferenceInputs> = {}): In
   }
 }
 
+function readyState(config: RawConfig): ConfigSourceState {
+  return { status: 'ready', config, url: null, error: null }
+}
+
 /**
  * Renders the panel the way the page does, so the wiring from a config through
  * the estimator to the figures on screen is covered end to end.
  */
 function render(config: RawConfig, overrides: Partial<InferenceInputs> = {}): string {
   const shape = detectModelShape(config)
-  const inferenceInputs = inputs(config, overrides)
   const result: InferenceResult | null = shape
-    ? estimateInference(shape, inferenceInputs)
+    ? estimateInference(shape, inputs(config, overrides))
     : null
-  const shapeState: InferenceShapeState = {
-    status: shape ? 'ready' : 'error',
-    shape,
-    config,
-    configUrl: null,
-    error: shape ? null : 'That config describes no transformer.',
-  }
   return renderToString(
     createElement(InferenceResults, {
       result,
-      shapeState,
+      configState: readyState(config),
+      shape,
       computeError: null,
       modelLabel: 'Qwen/Qwen3-8B',
     }),
@@ -98,6 +95,12 @@ describe('InferenceResults with a model that fits one card', () => {
     expect(html).toMatch(/\d+(\.\d+)?\s*(MiB|GiB)/)
   })
 
+  it('names the cache dtype the answer was costed with', () => {
+    const html = render(QWEN3_8B, { gpuFilter: ['rtx-4090'] })
+    expect(html).toContain('Cache dtype')
+    expect(html).toContain('BF16')
+  })
+
   it('renders the room left and the decode rate', () => {
     const html = render(QWEN3_8B, { gpuFilter: ['rtx-4090'] })
     expect(html).toContain('How much room is left?')
@@ -120,6 +123,30 @@ describe('InferenceResults with a model that fits one card', () => {
     expect(html).toContain('Memory in detail')
     expect(html).toContain('What one card holds')
     expect(html).toContain('Assumptions and caveats')
+  })
+
+  it('costs a narrower cache dtype on a smaller card than BF16 needs', () => {
+    const wide = detectModelShape(QWEN3_8B)
+    const bf16 = wide
+      ? estimateInference(wide, inputs(QWEN3_8B, { contextLength: 32768, sequences: 4 }))
+      : null
+    const fp8 = wide
+      ? estimateInference(
+          wide,
+          inputs(QWEN3_8B, {
+            contextLength: 32768,
+            sequences: 4,
+            kvCacheDtype: 'FP8_E4M3',
+            indexerDtype: 'FP8_E4M3',
+          }),
+        )
+      : null
+
+    expect(bf16).not.toBeNull()
+    expect(fp8).not.toBeNull()
+    expect(fp8!.kvCacheBytes).toBeLessThan(bf16!.kvCacheBytes)
+    expect(fp8!.totalBytes).toBeLessThan(bf16!.totalBytes)
+    expect(fp8!.weightsBytes).toBe(bf16!.weightsBytes)
   })
 })
 
@@ -159,7 +186,8 @@ describe('InferenceResults before a config arrives', () => {
     const html = renderToString(
       createElement(InferenceResults, {
         result: null,
-        shapeState: { status: 'idle', shape: null, config: null, configUrl: null, error: null },
+        configState: { status: 'idle', config: null, url: null, error: null },
+        shape: null,
         computeError: null,
       }),
     )
@@ -170,7 +198,8 @@ describe('InferenceResults before a config arrives', () => {
     const html = renderToString(
       createElement(InferenceResults, {
         result: null,
-        shapeState: { status: 'loading', shape: null, config: null, configUrl: null, error: null },
+        configState: { status: 'loading', config: null, url: null, error: null },
+        shape: null,
         computeError: null,
       }),
     )
@@ -182,13 +211,13 @@ describe('InferenceResults before a config arrives', () => {
     const html = renderToString(
       createElement(InferenceResults, {
         result: null,
-        shapeState: {
+        configState: {
           status: 'error',
-          shape: null,
           config: null,
-          configUrl: null,
-          error: 'The calculator cannot read that model config.',
+          url: null,
+          error: new Error('The calculator cannot read that model config.') as never,
         },
+        shape: null,
         computeError: null,
       }),
     )
@@ -196,17 +225,25 @@ describe('InferenceResults before a config arrives', () => {
     expect(html).toContain('The calculator cannot read that model config.')
   })
 
+  it('reports a config that describes no transformer', () => {
+    const html = renderToString(
+      createElement(InferenceResults, {
+        result: null,
+        configState: readyState({ model_type: 'gateway' }),
+        shape: null,
+        computeError: null,
+      }),
+    )
+    expect(html).toContain('The calculator cannot size that config')
+    expect(html).toContain('hidden size')
+  })
+
   it('reports inputs the estimator rejected', () => {
     const html = renderToString(
       createElement(InferenceResults, {
         result: null,
-        shapeState: {
-          status: 'ready',
-          shape: detectModelShape(QWEN3_8B),
-          config: QWEN3_8B,
-          configUrl: null,
-          error: null,
-        },
+        configState: readyState(QWEN3_8B),
+        shape: detectModelShape(QWEN3_8B),
         computeError: 'The VRAM headroom must be at least 0 percent and less than 100 percent.',
       }),
     )
@@ -230,7 +267,7 @@ describe('InferenceResults copy', () => {
 
   it('uses no contraction anywhere it renders', () => {
     const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
-    for (const contraction of ['doesn\u2019t', "doesn't", 'cannot be', "isn't", "it's"]) {
+    for (const contraction of ['doesn\u2019t', "doesn't", "isn't", "it's"]) {
       expect(html).not.toContain(contraction)
     }
   })

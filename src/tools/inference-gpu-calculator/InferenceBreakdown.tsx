@@ -17,7 +17,10 @@ export default function InferenceBreakdown({ result }: { result: InferenceResult
           <BreakdownPanel value="memory" label="Memory in detail">
             <dl className="text-sm">
               <Row label="Resident weights" value={formatBytes(result.weightsBytes).text} />
-              <Row label="KV cache" value={formatBytes(result.kvCacheBytes).text} />
+              <Row
+                label={`KV cache in ${result.kvCacheDtype}`}
+                value={formatBytes(result.kvCacheBytes).text}
+              />
               <Row label="Activation buffer" value={formatBytes(result.activationBytes).text} />
               <Row
                 label="Framework reserve"

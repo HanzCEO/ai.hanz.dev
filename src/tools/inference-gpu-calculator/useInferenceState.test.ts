@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import { defaultsFromSchema, serializeState } from '@/lib/url-state'
+import {
+  CALCULATOR_SCHEMA,
+  type CalculatorInputs,
+} from '@/tools/kv-cache-calculator/useCalculatorState'
 
 import { INFERENCE_SCHEMA, type InferenceFormInputs } from './useInferenceState'
 
 const DEFAULTS = defaultsFromSchema(INFERENCE_SCHEMA)
 
 describe('INFERENCE_SCHEMA', () => {
-  it('covers every field of the form', () => {
+  it('covers every field the page reads', () => {
     const expected: Array<keyof InferenceFormInputs> = [
+      // The model source, shared with the cache layer.
       'mode',
       'provider',
       'modelId',
@@ -26,21 +31,37 @@ describe('INFERENCE_SCHEMA', () => {
       'moeIntermediateSize',
       'moeLayers',
       'tieEmbeddings',
-      'precision',
+      // The cache layer's own fields.
       'contextLength',
-      'sequences',
+      'sequenceCount',
+      'kvCacheDtype',
+      'indexerDtype',
+      // The hardware fields this layer adds.
+      'precision',
       'headroomPercent',
       'maxGpus',
     ]
     expect(Object.keys(INFERENCE_SCHEMA).sort()).toEqual([...expected].sort())
   })
 
-  it('opens on a hub model in BF16 with a single sequence', () => {
-    expect(DEFAULTS.mode).toBe('hub')
-    expect(DEFAULTS.modelId).toBe('Qwen/Qwen3-8B')
+  it('extends the cache schema rather than restating it', () => {
+    const cacheKeys = Object.keys(CALCULATOR_SCHEMA)
+    for (const key of cacheKeys) {
+      expect(INFERENCE_SCHEMA[key as keyof InferenceFormInputs]).toBe(
+        CALCULATOR_SCHEMA[key as keyof CalculatorInputs],
+      )
+    }
+  })
+
+  it('adds only the three hardware fields', () => {
+    const added = Object.keys(INFERENCE_SCHEMA).filter(
+      (key) => !(key in CALCULATOR_SCHEMA),
+    )
+    expect(added.sort()).toEqual(['headroomPercent', 'maxGpus', 'precision'])
+  })
+
+  it('opens on BF16, a 10 percent headroom, and a limit of 8 cards', () => {
     expect(DEFAULTS.precision).toBe('BF16')
-    expect(DEFAULTS.contextLength).toBe('8192')
-    expect(DEFAULTS.sequences).toBe('1')
     expect(DEFAULTS.headroomPercent).toBe('10')
     expect(DEFAULTS.maxGpus).toBe('8')
   })
@@ -59,7 +80,7 @@ describe('INFERENCE_SCHEMA', () => {
     // URL that a reader might share.
     expect(query).not.toContain('token')
     expect(query).not.toContain('hf_a_secret_token')
-    expect(query).not.toContain('config')
+    expect(query).not.toContain('config=')
   })
 
   it('round-trips every field through the query string', () => {
@@ -80,9 +101,11 @@ describe('INFERENCE_SCHEMA', () => {
       moeIntermediateSize: '768',
       moeLayers: '21',
       tieEmbeddings: 'tied',
+      contextLength: '65536',
+      sequenceCount: '8',
+      kvCacheDtype: 'FP8_E4M3',
+      indexerDtype: 'FP4',
       precision: 'FP16',
-      contextLength: '32768',
-      sequences: '8',
       headroomPercent: '12.5',
       maxGpus: '4',
     }
@@ -110,10 +133,16 @@ describe('INFERENCE_SCHEMA', () => {
     expect(INFERENCE_SCHEMA.tieEmbeddings.parse('shared')).toBeNull()
   })
 
-  it('accepts the two precisions and no others', () => {
+  it('accepts the two weight precisions and no others', () => {
     expect(INFERENCE_SCHEMA.precision.parse('FP16')).toBe('FP16')
     expect(INFERENCE_SCHEMA.precision.parse('BF16')).toBe('BF16')
     expect(INFERENCE_SCHEMA.precision.parse('INT8')).toBeNull()
+  })
+
+  it('accepts the cache dtypes the cache layer offers', () => {
+    expect(INFERENCE_SCHEMA.kvCacheDtype.parse('FP8_E4M3')).toBe('FP8_E4M3')
+    expect(INFERENCE_SCHEMA.kvCacheDtype.parse('BF16')).toBe('BF16')
+    expect(INFERENCE_SCHEMA.kvCacheDtype.parse('NOPE')).toBeNull()
   })
 
   it('rejects a fractional context length and a negative headroom', () => {

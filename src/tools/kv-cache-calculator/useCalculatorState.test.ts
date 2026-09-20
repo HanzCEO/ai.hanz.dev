@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import { defaultsFromSchema, parsePositiveInteger, serializeState } from '@/lib/url-state'
+import {
+  CONFIG_SOURCE_DEFAULTS,
+  CONFIG_SOURCE_SCHEMA,
+  type ConfigSourceInputs,
+} from '@/lib/use-config-source'
 
 import {
   CALCULATOR_SCHEMA,
   DEFAULT_CONTEXT_LENGTH,
   DEFAULT_MODEL_ID,
   DEFAULT_SEQUENCE_COUNT,
+  type CalculatorInputs,
 } from './useCalculatorState'
 
 /**
@@ -63,6 +69,69 @@ describe('CALCULATOR_SCHEMA', () => {
     expect(CALCULATOR_SCHEMA.kvCacheDtype.parse('NOPE')).toBeNull()
     expect(CALCULATOR_SCHEMA.provider.parse('modelscope')).toBe('modelscope')
     expect(CALCULATOR_SCHEMA.provider.parse('github')).toBeNull()
+  })
+
+  it('covers every field of the page', () => {
+    const expected: Array<keyof CalculatorInputs> = [
+      'mode',
+      'provider',
+      'modelId',
+      'token',
+      'configText',
+      'hiddenSize',
+      'intermediateSize',
+      'numLayers',
+      'vocabSize',
+      'attentionHeads',
+      'kvHeads',
+      'headDim',
+      'routedExperts',
+      'expertsPerToken',
+      'moeIntermediateSize',
+      'moeLayers',
+      'tieEmbeddings',
+      'contextLength',
+      'sequenceCount',
+      'kvCacheDtype',
+      'indexerDtype',
+    ]
+    expect(Object.keys(CALCULATOR_SCHEMA).sort()).toEqual([...expected].sort())
+  })
+
+  it('takes the model source fields from the shared schema', () => {
+    for (const key of Object.keys(CONFIG_SOURCE_SCHEMA)) {
+      expect(CALCULATOR_SCHEMA[key as keyof CalculatorInputs]).toBe(
+        CONFIG_SOURCE_SCHEMA[key as keyof ConfigSourceInputs],
+      )
+    }
+    expect(CALCULATOR_SCHEMA.modelId.default).toBe(CONFIG_SOURCE_DEFAULTS.modelId)
+  })
+
+  it('adds only the four cache fields', () => {
+    const added = Object.keys(CALCULATOR_SCHEMA).filter((key) => !(key in CONFIG_SOURCE_SCHEMA))
+    expect(added.sort()).toEqual([
+      'contextLength',
+      'indexerDtype',
+      'kvCacheDtype',
+      'sequenceCount',
+    ])
+  })
+
+  it('round-trips the model source fields it shares with the inference page', () => {
+    const values: CalculatorInputs = {
+      ...defaults,
+      mode: 'manual',
+      hiddenSize: '2048',
+      numLayers: '42',
+      kvHeads: '2',
+      tieEmbeddings: 'tied',
+    }
+    const params = new URLSearchParams(serializeState(CALCULATOR_SCHEMA, values))
+    expect(params.get('mode')).toBe('manual')
+    expect(params.get('hidden')).toBe('2048')
+    expect(params.get('layers')).toBe('42')
+    expect(params.get('kv_heads')).toBe('2')
+    expect(params.get('tied')).toBe('tied')
   })
 })
 

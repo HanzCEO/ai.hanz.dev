@@ -112,6 +112,76 @@ describe('estimateInference memory', () => {
         result.runtimeReserveBytes,
     )
   })
+
+  it('defaults both cache dtypes to the weight precision', () => {
+    const result = estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'BF16' }))
+    expect(result.kvCacheDtype).toBe('BF16')
+    expect(result.indexerDtype).toBe('BF16')
+  })
+
+  it('gives the same cache for an omitted dtype as for the weight precision', () => {
+    const omitted = estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'FP16' }))
+    const explicit = estimateInference(
+      qwen3(),
+      inputs(QWEN3_8B, { precision: 'FP16', kvCacheDtype: 'FP16', indexerDtype: 'FP16' }),
+    )
+    expect(omitted.kvCacheBytes).toBe(explicit.kvCacheBytes)
+    expect(omitted.totalBytes).toBe(explicit.totalBytes)
+    expect(omitted.weightsBytes).toBe(explicit.weightsBytes)
+  })
+
+  it('lowers the cache and the total for a narrower cache dtype', () => {
+    const wide = estimateInference(qwen3(), inputs(QWEN3_8B, { contextLength: 32768 }))
+    const narrow = estimateInference(
+      qwen3(),
+      inputs(QWEN3_8B, {
+        contextLength: 32768,
+        kvCacheDtype: 'FP8_E4M3',
+        indexerDtype: 'FP8_E4M3',
+      }),
+    )
+    // Eight bits against sixteen, so the cache halves.
+    expect(narrow.kvCacheBytes).toBe(wide.kvCacheBytes / 2)
+    expect(narrow.kvBytesPerToken).toBe(wide.kvBytesPerToken / 2)
+    expect(narrow.totalBytes).toBeLessThan(wide.totalBytes)
+  })
+
+  it('never lets a narrower cache dtype move the weight figure', () => {
+    const wide = estimateInference(qwen3(), inputs(QWEN3_8B))
+    const narrow = estimateInference(
+      qwen3(),
+      inputs(QWEN3_8B, { kvCacheDtype: 'FP8_E4M3', indexerDtype: 'FP8_E4M3' }),
+    )
+    // The weights are served in FP16 or BF16 whatever the cache is held in.
+    expect(narrow.weightsBytes).toBe(wide.weightsBytes)
+    expect(narrow.bytesPerWeight).toBe(wide.bytesPerWeight)
+    expect(narrow.precision).toBe(wide.precision)
+  })
+
+  it('reports the cache dtypes it costed', () => {
+    const result = estimateInference(
+      qwen3(),
+      inputs(QWEN3_8B, { kvCacheDtype: 'FP8_E4M3', indexerDtype: 'BF16' }),
+    )
+    expect(result.kvCacheDtype).toBe('FP8_E4M3')
+    expect(result.indexerDtype).toBe('BF16')
+  })
+
+  it('lets a narrower cache dtype fit a card the wider one misses', () => {
+    // A 24 GB card at a long context is the case the dtype actually decides.
+    const options = { contextLength: 32768, sequences: 4, gpuFilter: ['rtx-4090'] }
+    const wide = estimateInference(qwen3(), inputs(QWEN3_8B, options))
+    const narrow = estimateInference(
+      qwen3(),
+      inputs(QWEN3_8B, {
+        ...options,
+        kvCacheDtype: 'FP8_E4M3',
+        indexerDtype: 'FP8_E4M3',
+      }),
+    )
+    expect(narrow.totalBytes).toBeLessThan(wide.totalBytes)
+    expect(narrow.verdict).not.toBe('none')
+  })
 })
 
 describe('estimateInference verdicts', () => {

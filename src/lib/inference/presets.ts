@@ -58,12 +58,6 @@ export const DEFAULT_HEADROOM = 0.1
 /** The most cards the ranking will use before it reports that nothing fits. */
 export const MAX_SUGGESTED_GPUS = 8
 
-/** Tokens in each sequence when the page opens. */
-export const DEFAULT_CONTEXT_LENGTH = 8192
-
-/** Sequences served at once when the page opens. */
-export const DEFAULT_SEQUENCES = 1
-
 /** The precision the page opens on. */
 export const DEFAULT_PRECISION = 'BF16'
 

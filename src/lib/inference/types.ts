@@ -1,4 +1,5 @@
 import type { GpuSpec } from '../hardware'
+import type { DtypeId } from '../kvcache'
 import type { RawConfig } from '../model-config'
 import type { ModelShape } from '../model-shape'
 
@@ -35,6 +36,16 @@ export interface InferenceInputs {
   maxGpus: number
   /** Restricts the answer to these GPU ids. Every card is considered when absent. */
   gpuFilter?: string[]
+  /**
+   * The dtype the KV cache is held in, for example FP8.
+   *
+   * A cache is far smaller than the weights, but it is the term that grows with
+   * the context, so its dtype can decide which card fits. Absent means the cache
+   * is held in the weight precision.
+   */
+  kvCacheDtype?: DtypeId
+  /** The dtype a sparse indexer cache is held in. Absent means the weight precision. */
+  indexerDtype?: DtypeId
 }
 
 /**
@@ -65,6 +76,10 @@ export interface InferenceResult {
   precision: InferencePrecision
   /** Bytes for each weight. Two for both precisions. */
   bytesPerWeight: number
+  /** The dtype the KV cache was costed in. */
+  kvCacheDtype: DtypeId
+  /** The dtype a sparse indexer cache was costed in. */
+  indexerDtype: DtypeId
 
   // --- What was asked for ------------------------------------------------
   contextLength: number
