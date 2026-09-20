@@ -117,7 +117,12 @@ export default function InferenceGpuCalculator() {
   const modelLabel = inputs.mode === 'hub' ? inputs.modelId : shape?.modelType
 
   const cacheSummary = cacheResult
-    ? describeCacheStep(cacheResult, inputs.modelId, inputs.kvCacheDtype)
+    ? describeCacheStep(
+        cacheResult,
+        inputs.modelId,
+        inputs.kvCacheDtype,
+        inputs.indexerDtype,
+      )
     : 'Enter a model, a context length, and a sequence count to size the cache.'
 
   return (

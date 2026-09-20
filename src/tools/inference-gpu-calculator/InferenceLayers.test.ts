@@ -110,15 +110,21 @@ describe('InferenceLayers', () => {
 
 describe('the collapsed cache summary', () => {
   const config = loadConfigFixture('qwen3-8b')
+  /** An MLA model, so it holds a separate indexer cache with its own dtype. */
+  const indexed = loadConfigFixture('glm-5-3')
 
-  it('names the model, the context, the sequences, the dtype and the size', () => {
-    const result = computeKvCache(config, {
+  function cacheOf(source: typeof config, kvCacheDtype: string, indexerDtype: string) {
+    return computeKvCache(source, {
       contextLength: 32768,
       sequenceCount: 4,
-      kvCacheDtype: 'FP8_E4M3',
-      indexerDtype: 'FP8_E4M3',
+      kvCacheDtype: kvCacheDtype as never,
+      indexerDtype: indexerDtype as never,
     })
-    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'FP8_E4M3')
+  }
+
+  it('names the model, the context, the sequences, the dtype and the size', () => {
+    const result = cacheOf(config, 'FP8_E4M3', 'FP8_E4M3')
+    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'FP8_E4M3', 'FP8_E4M3')
     expect(summary).toContain('Qwen/Qwen3-8B')
     expect(summary).toContain('32,768 tokens')
     expect(summary).toContain('4 sequences')
@@ -139,16 +145,54 @@ describe('the collapsed cache summary', () => {
     expect(summary).not.toContain('1 sequences')
   })
 
+  it('names one dtype for a model with no indexer cache', () => {
+    const result = cacheOf(config, 'FP8_E4M3', 'BF16')
+    expect(result.indexerDtypeSupport).toBeNull()
+    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'FP8_E4M3', 'BF16')
+    expect(summary).toContain('in FP8_E4M3.')
+    // The indexer dtype is meaningless for this model, so it is not named.
+    expect(summary).not.toContain('indexer')
+  })
+
+  it('names one dtype when a model with an indexer uses the same dtype for both', () => {
+    const result = cacheOf(indexed, 'FP8_E4M3', 'FP8_E4M3')
+    expect(result.indexerDtypeSupport).not.toBeNull()
+    const summary = describeCacheStep(result, 'zai-org/GLM-5.3', 'FP8_E4M3', 'FP8_E4M3')
+    expect(summary).toContain('in FP8_E4M3.')
+    expect(summary).not.toContain('indexer')
+  })
+
+  it('names both dtypes when a model with an indexer uses a mixed pair', () => {
+    const result = cacheOf(indexed, 'FP8_E4M3', 'FP4')
+    const summary = describeCacheStep(result, 'zai-org/GLM-5.3', 'FP8_E4M3', 'FP4')
+    // Naming only one would misreport the pair, so both are named.
+    expect(summary).toContain('The attention cache is in FP8_E4M3')
+    expect(summary).toContain('the indexer cache is in FP4')
+  })
+
+  it('keeps every sentence to 20 words or fewer', () => {
+    const summaries = [
+      describeCacheStep(cacheOf(config, 'FP8_E4M3', 'BF16'), 'Qwen/Qwen3-8B', 'FP8_E4M3', 'BF16'),
+      describeCacheStep(cacheOf(indexed, 'FP8_E4M3', 'FP4'), 'zai-org/GLM-5.3', 'FP8_E4M3', 'FP4'),
+    ]
+    for (const summary of summaries) {
+      const sentences = summary.split(/(?<=[.!?])\s+/).filter((part) => part !== '')
+      for (const sentence of sentences) {
+        const words = sentence.split(/\s+/).filter((word) => word !== '').length
+        expect(words, `${words} words: ${sentence}`).toBeLessThanOrEqual(20)
+      }
+    }
+  })
+
   it('uses no em dash or en dash', () => {
-    const result = computeKvCache(config, {
-      contextLength: 8192,
-      sequenceCount: 1,
-      kvCacheDtype: 'BF16',
-      indexerDtype: 'BF16',
-    })
-    const summary = describeCacheStep(result, 'Qwen/Qwen3-8B', 'BF16')
-    expect(summary).not.toContain('\u2014')
-    expect(summary).not.toContain('\u2013')
+    const summaries = [
+      describeCacheStep(cacheOf(config, 'BF16', 'BF16'), 'Qwen/Qwen3-8B', 'BF16', 'BF16'),
+      describeCacheStep(cacheOf(indexed, 'FP8_E4M3', 'FP4'), 'zai-org/GLM-5.3', 'FP8_E4M3', 'FP4'),
+    ]
+    for (const summary of summaries) {
+      expect(summary).not.toContain('\u2014')
+      expect(summary).not.toContain('\u2013')
+    }
   })
 })
 
