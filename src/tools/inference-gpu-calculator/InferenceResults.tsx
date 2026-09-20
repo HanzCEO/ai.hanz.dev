@@ -1,8 +1,8 @@
-import { AlertTriangle, Check, Copy, ExternalLink, Gauge, HardDrive, Loader2, Server } from 'lucide-react'
+import { AlertTriangle, Check, Copy, ExternalLink, Gauge, HardDrive, Loader2, Server, Sparkles } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { formatBytes, formatExact } from '@/lib/format'
-import type { InferenceCandidate, InferenceResult } from '@/lib/inference'
+import { mtpHeadSpec, type InferenceCandidate, type InferenceResult } from '@/lib/inference'
 import type { ModelShape } from '@/lib/model-shape'
 import { SUPPORT_URL } from '@/lib/seo'
 import type { ConfigSourceState } from '@/lib/use-config-source'
@@ -145,6 +145,9 @@ export default function InferenceResults({
   const fitting: InferenceCandidate[] = recommended
     ? [recommended, ...result.alternatives]
     : []
+  // The row behind the selected head, so the page can name it in prose rather
+  // than repeat the label in every branch below.
+  const mtp = result.mtpHead === 'none' ? null : (mtpHeadSpec(result.mtpHead) ?? null)
 
   return (
     <div className="flex flex-col gap-4" aria-live="polite">
@@ -229,6 +232,12 @@ export default function InferenceResults({
                 {formatBytes(recommended.perCardBytes).text} of its{' '}
                 {formatBytes(recommended.usableBytes).text} of usable VRAM, which reaches about{' '}
                 {formatRate(result.decodeTokensPerSecond)}.
+                {mtp && (
+                  <>
+                    {' '}
+                    With {mtp.label} selected, the rate is {result.mtpSpeedup}x higher.
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -365,6 +374,19 @@ export default function InferenceResults({
                     {formatRate(result.perSequenceTokensPerSecond)}. The figure ignores prefill and
                     the cost of the interconnect.
                   </p>
+                  {mtp ? (
+                    <p className="text-muted-foreground text-sm">
+                      That figure includes the {mtp.label}, which multiplies the roofline by{' '}
+                      {result.mtpSpeedup}. Without a head the same configuration reaches about{' '}
+                      {formatRate(result.baseDecodeTokensPerSecond)}. Each model needs its own
+                      head, so this is an estimate for measurement.
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      No MTP head is selected, so this is the bandwidth roofline for the card.
+                      Each model needs its own head, so a head is a property of the checkpoint.
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -434,6 +456,24 @@ export default function InferenceResults({
           </p>
         </section>
       )}
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Sparkles className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p className="text-sm">
+              If you want an end-to-end managed deployment of a model with full-cycle
+              optimizations, contact us on Discord.
+            </p>
+          </div>
+          <Button asChild size="sm" className="shrink-0">
+            <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+              Contact us on Discord
+              <ExternalLink />
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Button asChild variant="outline" size="sm" className="w-fit">
         <a href={SUPPORT_URL} target="_blank" rel="noreferrer">

@@ -62,7 +62,7 @@ export default function InferenceLayers({
       <StepSection
         step={2}
         title="GPU configuration"
-        description="Set the precision and the memory you hold back. The calculator then tests every card at every card count."
+        description="Set the precision, the MTP head, and the memory you hold back. The calculator then tests every card at every card count."
         open={gpuOpen}
         onOpenChange={onGpuOpenChange}
         disabled={!gpuReady}

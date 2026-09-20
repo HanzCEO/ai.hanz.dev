@@ -38,6 +38,7 @@ describe('INFERENCE_SCHEMA', () => {
       'indexerDtype',
       // The hardware fields this layer adds.
       'precision',
+      'mtpHead',
       'headroomPercent',
       'maxGpus',
     ]
@@ -53,15 +54,16 @@ describe('INFERENCE_SCHEMA', () => {
     }
   })
 
-  it('adds only the three hardware fields', () => {
+  it('adds only the four hardware fields', () => {
     const added = Object.keys(INFERENCE_SCHEMA).filter(
       (key) => !(key in CALCULATOR_SCHEMA),
     )
-    expect(added.sort()).toEqual(['headroomPercent', 'maxGpus', 'precision'])
+    expect(added.sort()).toEqual(['headroomPercent', 'maxGpus', 'mtpHead', 'precision'])
   })
 
-  it('opens on BF16, a 10 percent headroom, and a limit of 8 cards', () => {
+  it('opens on BF16, no MTP head, a 10 percent headroom, and a limit of 8 cards', () => {
     expect(DEFAULTS.precision).toBe('BF16')
+    expect(DEFAULTS.mtpHead).toBe('none')
     expect(DEFAULTS.headroomPercent).toBe('10')
     expect(DEFAULTS.maxGpus).toBe('8')
   })
@@ -106,6 +108,7 @@ describe('INFERENCE_SCHEMA', () => {
       kvCacheDtype: 'FP8_E4M3',
       indexerDtype: 'FP4',
       precision: 'FP16',
+      mtpHead: 'eagle-3',
       headroomPercent: '12.5',
       maxGpus: '4',
     }
@@ -137,6 +140,25 @@ describe('INFERENCE_SCHEMA', () => {
     expect(INFERENCE_SCHEMA.precision.parse('FP16')).toBe('FP16')
     expect(INFERENCE_SCHEMA.precision.parse('BF16')).toBe('BF16')
     expect(INFERENCE_SCHEMA.precision.parse('INT8')).toBeNull()
+  })
+
+  it('accepts the five MTP heads and no others', () => {
+    expect(INFERENCE_SCHEMA.mtpHead.parse('none')).toBe('none')
+    expect(INFERENCE_SCHEMA.mtpHead.parse('sequential-mtp')).toBe('sequential-mtp')
+    expect(INFERENCE_SCHEMA.mtpHead.parse('parallel-mtp')).toBe('parallel-mtp')
+    expect(INFERENCE_SCHEMA.mtpHead.parse('medusa')).toBe('medusa')
+    expect(INFERENCE_SCHEMA.mtpHead.parse('eagle-3')).toBe('eagle-3')
+    // A head that only exists in someone else's fork is not offered here.
+    expect(INFERENCE_SCHEMA.mtpHead.parse('medusa-2')).toBeNull()
+    expect(INFERENCE_SCHEMA.mtpHead.parse('')).toBeNull()
+  })
+
+  it('writes the MTP head into the query string under mtp', () => {
+    expect(INFERENCE_SCHEMA.mtpHead.param).toBe('mtp')
+    const query = serializeState(INFERENCE_SCHEMA, { ...DEFAULTS, mtpHead: 'medusa' })
+    expect(new URLSearchParams(query).get('mtp')).toBe('medusa')
+    // The default head is the baseline, so it writes nothing at all.
+    expect(serializeState(INFERENCE_SCHEMA, { ...DEFAULTS, mtpHead: 'none' })).toBe('')
   })
 
   it('accepts the cache dtypes the cache layer offers', () => {

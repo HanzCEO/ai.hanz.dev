@@ -13,6 +13,17 @@ import type { ModelShape } from '../model-shape'
  */
 export type InferencePrecision = 'FP16' | 'BF16'
 
+/**
+ * The speculative decoding head a model is served with.
+ *
+ * A head is trained against one model, so the head and the checkpoint are a
+ * pair. The multiplier each one carries is held below the published figure,
+ * and it is an estimate for measurement rather than a guarantee. Only the
+ * decode rate moves with the head. The memory model does not, because a head
+ * adds a small number of weights against the whole checkpoint.
+ */
+export type MtpHeadType = 'none' | 'sequential-mtp' | 'parallel-mtp' | 'medusa' | 'eagle-3'
+
 /** What the recommendation found. */
 export type InferenceVerdict =
   /** One card holds the whole run. */
@@ -46,6 +57,14 @@ export interface InferenceInputs {
   kvCacheDtype?: DtypeId
   /** The dtype a sparse indexer cache is held in. Absent means the weight precision. */
   indexerDtype?: DtypeId
+  /**
+   * The speculative decoding head the model is served with.
+   *
+   * Absent means no head, which is the bandwidth roofline the calculator
+   * already reports. A head raises the decode rate and leaves every memory
+   * term alone.
+   */
+  mtpHead?: MtpHeadType
 }
 
 /**
@@ -109,10 +128,23 @@ export interface InferenceResult {
   closest: InferenceCandidate | null
 
   // --- Throughput --------------------------------------------------------
+  /** The head the rate was costed with, or none. */
+  mtpHead: MtpHeadType
+  /** The multiplier the selected head applies to the decode rate. */
+  mtpSpeedup: number
   /** Estimated decode tokens each second for the whole configuration. */
   decodeTokensPerSecond: number
   /** The same figure for one sequence. */
   perSequenceTokensPerSecond: number
+  /**
+   * The decode rate with no head, which is the bandwidth roofline.
+   *
+   * Reported beside the adjusted rate so a reader can see what the head
+   * added rather than only the total.
+   */
+  baseDecodeTokensPerSecond: number
+  /** The roofline rate for one sequence. */
+  basePerSequenceTokensPerSecond: number
 
   // --- Room to grow ------------------------------------------------------
   /** VRAM the recommendation leaves free on one card. */
@@ -133,6 +165,7 @@ export interface InferenceResult {
 /** The estimator input a validation error belongs to, when it has one. */
 export type InferenceInputField =
   | 'precision'
+  | 'mtpHead'
   | 'contextLength'
   | 'sequences'
   | 'headroom'

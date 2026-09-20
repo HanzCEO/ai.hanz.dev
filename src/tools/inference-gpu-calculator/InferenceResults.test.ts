@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { estimateInference, type InferenceInputs, type InferenceResult } from '@/lib/inference'
 import type { RawConfig } from '@/lib/model-config'
 import { detectModelShape } from '@/lib/model-shape'
+import { SUPPORT_URL } from '@/lib/seo'
 import type { ConfigSourceState } from '@/lib/use-config-source'
 import { loadConfigFixture } from '@/test/fixtures'
 
@@ -252,10 +253,96 @@ describe('InferenceResults before a config arrives', () => {
   })
 })
 
+describe('InferenceResults with an MTP head', () => {
+  it('names the head and the multiplier in the answer', () => {
+    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: 'eagle-3' }))
+    expect(html).toContain('EAGLE-3 head')
+    expect(html).toContain('the rate is 2x higher')
+    expect(html).toContain('Each model needs its own head')
+  })
+
+  it('shows a rate above the roofline and names the roofline', () => {
+    const shape = detectModelShape(QWEN3_8B)
+    expect(shape).not.toBeNull()
+    const options = { gpuFilter: ['rtx-4090'], mtpHead: 'eagle-3' as const }
+    const withHead = estimateInference(shape!, inputs(QWEN3_8B, options))
+    const withoutHead = estimateInference(shape!, inputs(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+
+    // The head doubles the rate and the roofline behind it does not move.
+    expect(withHead.decodeTokensPerSecond).toBeCloseTo(
+      withoutHead.decodeTokensPerSecond * 2,
+      6,
+    )
+    expect(withHead.baseDecodeTokensPerSecond).toBeCloseTo(
+      withoutHead.decodeTokensPerSecond,
+      6,
+    )
+
+    const html = visibleText(render(QWEN3_8B, options))
+    expect(html).toContain('Without a head the same configuration reaches about')
+    expect(html).toContain('which multiplies the roofline by 2')
+  })
+
+  it('says no head is selected when the answer is the plain roofline', () => {
+    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+    expect(html).toContain('No MTP head is selected')
+    expect(html).not.toContain('the rate is 2x higher')
+  })
+
+  it('opens the MTP panel of the breakdown and states where the figure came from', () => {
+    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: 'medusa' }))
+    expect(html).toContain('MTP head')
+    // The panel is open on arrival, so its rows are in the markup.
+    expect(html).toContain('Medusa heads')
+    expect(html).toContain('Multiplier')
+    expect(html).toContain('1.6x')
+    expect(html).toContain('Roofline rate')
+    expect(html).toContain('Rate with the head')
+    expect(html).toContain('over 2.2x with the backbone frozen')
+    expect(html).toContain('Medusa, arXiv 2401.10774')
+  })
+
+  it('names the roofline in the panel even when no head is selected', () => {
+    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+    expect(html).toContain('MTP head')
+  })
+
+  it('never moves a memory figure on screen', () => {
+    const withoutHead = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+    const withHead = visibleText(
+      render(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: 'sequential-mtp' }),
+    )
+    // The head scales the rate and not the footprint, so the two figures the
+    // memory sentence names have to read the same in both answers.
+    const figures = (html: string) =>
+      /The weights take ([\d.]+ \w+) and the cache takes ([\d.]+ \w+)/.exec(html)?.slice(1)
+    expect(figures(withoutHead)).toBeTruthy()
+    expect(figures(withHead)).toEqual(figures(withoutHead))
+  })
+})
+
+describe('InferenceResults managed deployment copy', () => {
+  it('offers an end to end managed deployment', () => {
+    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+    expect(html).toContain(
+      'If you want an end-to-end managed deployment of a model with full-cycle optimizations, contact us on Discord.',
+    )
+    expect(html).toContain('Contact us on Discord')
+    expect(html).toContain(SUPPORT_URL)
+  })
+
+  it('keeps the existing request for a missing model or card', () => {
+    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+    expect(html).toContain('Ask about a model or a card that is missing')
+  })
+})
+
 describe('InferenceResults copy', () => {
   it('uses no em dash or en dash anywhere it renders', () => {
     const pages = [
       render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }),
+      render(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: 'eagle-3' }),
+      render(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: 'sequential-mtp' }),
       render(LARGE, { gpuFilter: ['rtx-4090'] }),
       render(LARGE, { gpuFilter: ['rtx-4090'], maxGpus: 2 }),
     ]
@@ -266,9 +353,15 @@ describe('InferenceResults copy', () => {
   })
 
   it('uses no contraction anywhere it renders', () => {
-    const html = visibleText(render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
-    for (const contraction of ['doesn\u2019t', "doesn't", "isn't", "it's"]) {
-      expect(html).not.toContain(contraction)
+    const pages = [
+      render(QWEN3_8B, { gpuFilter: ['rtx-4090'] }),
+      render(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: 'eagle-3' }),
+    ]
+    for (const html of pages) {
+      const text = visibleText(html)
+      for (const contraction of ['doesn\u2019t', "doesn't", "isn't", "it's"]) {
+        expect(text).not.toContain(contraction)
+      }
     }
   })
 })

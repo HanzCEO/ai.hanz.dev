@@ -6,11 +6,18 @@ export {
   BANDWIDTH_EFFICIENCY,
   BYTES_PER_WEIGHT,
   DEFAULT_HEADROOM,
+  DEFAULT_MTP_HEAD,
   DEFAULT_PRECISION,
   GIB,
   MAX_SUGGESTED_GPUS,
+  MTP_HEAD_IDS,
+  MTP_HEADS,
   PRECISIONS,
   RUNTIME_OVERHEAD_BYTES,
+  isMtpHeadType,
+  mtpHeadSpec,
+  mtpSpeedup,
+  type MtpHeadSpec,
 } from './presets'
 export {
   InferenceInputError,
@@ -20,4 +27,5 @@ export {
   type InferencePrecision,
   type InferenceResult,
   type InferenceVerdict,
+  type MtpHeadType,
 } from './types'

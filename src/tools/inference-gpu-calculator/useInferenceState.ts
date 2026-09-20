@@ -2,10 +2,13 @@ import { useMemo } from 'react'
 
 import {
   DEFAULT_HEADROOM,
+  DEFAULT_MTP_HEAD,
   DEFAULT_PRECISION,
   MAX_SUGGESTED_GPUS,
+  MTP_HEAD_IDS,
   PRECISIONS,
   type InferencePrecision,
+  type MtpHeadType,
 } from '@/lib/inference'
 import { MANUAL_DEFAULTS } from '@/lib/model-config'
 import { decimalOrNull, digitsOrNull, enumOf, useUrlSyncedState, type UrlSchema } from '@/lib/url-state'
@@ -18,12 +21,14 @@ import {
  * The inference page inputs.
  *
  * The model source, the context length, the sequence count and the cache dtypes
- * belong to the cache layer, so they come from that schema. Only the three
+ * belong to the cache layer, so they come from that schema. Only the four
  * hardware fields are added here, which is what keeps the two layers from
  * offering the same input twice.
  */
 export interface InferenceFormInputs extends CalculatorInputs {
   precision: InferencePrecision
+  /** The speculative decoding head the model is served with. */
+  mtpHead: MtpHeadType
   /** Held as a percentage so the field reads the way a person would write it. */
   headroomPercent: string
   maxGpus: string
@@ -43,7 +48,7 @@ export { DEFAULT_MODEL_ID } from '@/lib/use-config-source'
 const DEFAULT_HEADROOM_PERCENT = String(DEFAULT_HEADROOM * 100)
 
 /**
- * The three hardware fields this layer owns, layered over the cache schema.
+ * The four hardware fields this layer owns, layered over the cache schema.
  *
  * Spread rather than repeated, so the model source, the context length, the
  * sequence count and the cache dtypes are declared exactly once for the whole
@@ -52,6 +57,7 @@ const DEFAULT_HEADROOM_PERCENT = String(DEFAULT_HEADROOM * 100)
 export const INFERENCE_SCHEMA: UrlSchema<InferenceFormInputs> = {
   ...CALCULATOR_SCHEMA,
   precision: { param: 'precision', default: DEFAULT_PRECISION, parse: enumOf(PRECISIONS) },
+  mtpHead: { param: 'mtp', default: DEFAULT_MTP_HEAD, parse: enumOf(MTP_HEAD_IDS) },
   headroomPercent: {
     param: 'headroom',
     default: DEFAULT_HEADROOM_PERCENT,
@@ -64,6 +70,8 @@ export const INFERENCE_SCHEMA: UrlSchema<InferenceFormInputs> = {
 export interface InferenceSeeded {
   model: boolean
   precision: boolean
+  /** True when the MTP head came from the URL. */
+  mtp: boolean
   context: boolean
   sequences: boolean
   /** True when either cache dtype came from the URL. */
@@ -83,6 +91,7 @@ export function useInferenceState() {
         return {
           model: flags.modelId,
           precision: flags.precision,
+          mtp: flags.mtpHead,
           context: flags.contextLength,
           sequences: flags.sequenceCount,
           dtype: flags.kvCacheDtype || flags.indexerDtype,

@@ -75,6 +75,7 @@ export default function InferenceGpuCalculator() {
     const inferenceInputs: InferenceInputs = {
       config,
       precision: inputs.precision,
+      mtpHead: inputs.mtpHead,
       contextLength,
       sequences: sequenceCount,
       headroom: headroomPercent / 100,
@@ -103,6 +104,7 @@ export default function InferenceGpuCalculator() {
     inputs.contextLength,
     inputs.sequenceCount,
     inputs.precision,
+    inputs.mtpHead,
     inputs.kvCacheDtype,
     inputs.indexerDtype,
     headroomPercent,
@@ -131,7 +133,7 @@ export default function InferenceGpuCalculator() {
 
       <ToolHeader
         title="Inference GPU Calculator"
-        description="Answer the hardware question in 2 steps. Step 1 sizes the KV cache from the model, the context length, and the sequences you serve. Step 2 turns that into the smallest GPU configuration that holds the run in FP16 or BF16, and reports the decode rate it reaches. The model shape comes from a HuggingFace or ModelScope config, from a config.json you paste, or from values you enter yourself."
+        description="Answer the hardware question in 2 steps. Step 1 sizes the KV cache from the model, the context length, and the sequences you serve. Step 2 turns that into the smallest GPU configuration that holds the run in FP16 or BF16, and reports the decode rate it reaches. It also reports what a speculative MTP head does to that rate. The model shape comes from a HuggingFace or ModelScope config, from a config.json you paste, or from values you enter yourself."
       />
 
       <InferenceLayers

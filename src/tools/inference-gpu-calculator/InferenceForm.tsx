@@ -1,4 +1,8 @@
-import type { InferenceInputField, InferencePrecision } from '@/lib/inference'
+import {
+  MTP_HEADS,
+  type InferenceInputField,
+  type InferencePrecision,
+} from '@/lib/inference'
 import NumberField from '@/components/ui/number-field'
 import SegmentedControl from '@/components/ui/segmented'
 
@@ -40,7 +44,8 @@ interface InferenceFormProps {
  *
  * The model, the context length, the sequence count and the cache dtypes belong
  * to step 1, so this form does not repeat them. It asks only for what step 1
- * cannot know: the precision the weights are served in, and the memory limits.
+ * cannot know: the precision the weights are served in, the speculative
+ * decoding head, and the memory limits.
  */
 export default function InferenceForm({
   inputs,
@@ -58,6 +63,24 @@ export default function InferenceForm({
         onValueChange={(precision) => update({ precision })}
         wrap
       />
+
+      <div className="flex flex-col gap-3">
+        <SegmentedControl
+          legend="MTP head"
+          options={MTP_HEADS.map((head) => ({
+            id: head.id,
+            label: head.label,
+            hint: head.hint,
+          }))}
+          value={inputs.mtpHead}
+          onValueChange={(mtpHead) => update({ mtpHead })}
+          wrap
+        />
+        <p className="text-xs text-muted-foreground">
+          MTP is a property of the trained checkpoint. Each model needs its own head. The figure
+          here is an estimate for measurement, and not a guarantee.
+        </p>
+      </div>
 
       <fieldset className="flex flex-col gap-4">
         <legend className="text-sm font-medium">Hardware limits</legend>

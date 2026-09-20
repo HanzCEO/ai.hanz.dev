@@ -8,9 +8,13 @@ import {
   ACTIVATION_FACTOR,
   BANDWIDTH_EFFICIENCY,
   BYTES_PER_WEIGHT,
+  DEFAULT_MTP_HEAD,
   GIB,
   PRECISIONS,
   RUNTIME_OVERHEAD_BYTES,
+  isMtpHeadType,
+  mtpHeadSpec,
+  mtpSpeedup,
 } from './presets'
 import {
   InferenceInputError,
@@ -32,6 +36,12 @@ function validate(inputs: InferenceInputs): void {
     throw new InferenceInputError(
       `Unknown precision "${String(inputs.precision)}". Pick FP16 or BF16.`,
       'precision',
+    )
+  }
+  if (inputs.mtpHead !== undefined && !isMtpHeadType(inputs.mtpHead)) {
+    throw new InferenceInputError(
+      `Unknown MTP head "${String(inputs.mtpHead)}". Pick a head from the list.`,
+      'mtpHead',
     )
   }
   requirePositive(inputs.contextLength, 'contextLength', 'Context length')
@@ -64,12 +74,22 @@ function validate(inputs: InferenceInputs): void {
  * reads every active weight once, so the throughput figure here is a bandwidth
  * roofline. It ignores prefill, kernel launch overhead, and the cost of the
  * interconnect that tensor parallelism needs.
+ *
+ * A speculative decoding head raises that roofline, because one pass of the
+ * model then yields several accepted tokens. The head is a property of the
+ * trained checkpoint, so the multiplier is an estimate for measurement rather
+ * than a promise. It moves the decode rate and leaves every memory term alone.
  */
 export function estimateInference(shape: ModelShape, inputs: InferenceInputs): InferenceResult {
   validate(inputs)
 
   const { precision, contextLength, sequences, headroom, maxGpus } = inputs
   const bytesPerWeight = BYTES_PER_WEIGHT
+
+  // A head is trained against one model, so it is a property of the checkpoint
+  // and not of the hardware. An absent head is no head, which is the roofline.
+  const mtpHead = inputs.mtpHead ?? DEFAULT_MTP_HEAD
+  const mtpMultiplier = mtpSpeedup(mtpHead)
 
   // --- Memory -------------------------------------------------------------
   //
@@ -110,11 +130,15 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
   const perCardBytesFor = (cards: number) => divisibleBytes / cards + undividedBytes
   const usableBytesFor = (gpu: GpuSpec) => gpu.vramGiB * GIB * (1 - headroom)
 
-  // Each token reads every active weight and the whole KV cache once.
+  // Each token reads every active weight and the whole KV cache once. A head
+  // raises the rate, because one pass of the model then yields several
+  // accepted tokens. The memory terms above do not move with it.
   const stepBytes = shape.activeParamsPerToken * bytesPerWeight + kvCacheBytes
   const decodeTokensPerSecondFor = (gpu: GpuSpec, cards: number) =>
     stepBytes > 0
-      ? ((gpu.bandwidthGBs * 1e9 * cards * BANDWIDTH_EFFICIENCY) / stepBytes) * sequences
+      ? ((gpu.bandwidthGBs * 1e9 * cards * BANDWIDTH_EFFICIENCY) / stepBytes) *
+        sequences *
+        mtpMultiplier
       : 0
 
   const build = (gpu: GpuSpec, cards: number, fits: boolean): InferenceCandidate => {
@@ -179,8 +203,15 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     ? recommended.gpu.bandwidthGBs * 1e9 * recommended.gpuCount * BANDWIDTH_EFFICIENCY
     : 0
   const perSequenceTokensPerSecond =
-    recommended && stepBytes > 0 ? effectiveBandwidth / stepBytes : 0
+    recommended && stepBytes > 0 ? (effectiveBandwidth / stepBytes) * mtpMultiplier : 0
   const decodeTokensPerSecond = recommended?.decodeTokensPerSecond ?? 0
+
+  // The roofline the head was applied to, so the page can name what the head
+  // added. A rate of zero has no head to divide out, so it stays zero.
+  const baseDecodeTokensPerSecond =
+    mtpMultiplier > 0 ? decodeTokensPerSecond / mtpMultiplier : 0
+  const basePerSequenceTokensPerSecond =
+    mtpMultiplier > 0 ? perSequenceTokensPerSecond / mtpMultiplier : 0
 
   // --- Room to grow -------------------------------------------------------
   //
@@ -233,7 +264,14 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     },
     {
       label: 'Decode throughput',
-      detail: `Each token reads ${formatExact(shape.activeParamsPerToken)} active parameters and the whole cache, which is ${formatBytes(stepBytes).text}.${recommended ? ` ${recommended.gpuCount} x ${recommended.gpu.label} offers ${formatExact(recommended.gpu.bandwidthGBs * recommended.gpuCount)} GB/s at ${(BANDWIDTH_EFFICIENCY * 100).toFixed(0)} percent of the peak. That gives about ${formatExact(perSequenceTokensPerSecond)} tokens each second for one sequence.` : ''}`,
+      detail: `Each token reads ${formatExact(shape.activeParamsPerToken)} active parameters and the whole cache, which is ${formatBytes(stepBytes).text}.${recommended ? ` ${recommended.gpuCount} x ${recommended.gpu.label} offers ${formatExact(recommended.gpu.bandwidthGBs * recommended.gpuCount)} GB/s at ${(BANDWIDTH_EFFICIENCY * 100).toFixed(0)} percent of the peak. That roofline gives about ${formatExact(basePerSequenceTokensPerSecond)} tokens each second for one sequence.` : ''}`,
+    },
+    {
+      label: 'MTP head',
+      detail:
+        mtpHead === DEFAULT_MTP_HEAD
+          ? 'No speculative decoding head is selected, so the answer stays on the bandwidth roofline. The head is trained against one model, so the figure is an estimate for measurement.'
+          : `${mtpHeadSpec(mtpHead)?.label ?? mtpHead} applies a ${mtpMultiplier}x multiplier to the roofline, which gives about ${formatExact(perSequenceTokensPerSecond)} tokens each second for one sequence. The head is trained against one model, so the figure is an estimate for measurement and not a guarantee.`,
     },
     {
       label: 'Room to grow',
@@ -261,6 +299,16 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
       source: 'the weights one token reads on the forward pass, router excluded. These set the decode bandwidth.',
     },
     { key: 'precision', value: precision, source: 'the precision the model is served in' },
+    {
+      key: 'mtp_head',
+      value: mtpHead,
+      source: 'the speculative decoding head the model is served with, which is a property of the checkpoint',
+    },
+    {
+      key: 'mtp_speedup',
+      value: mtpMultiplier,
+      source: 'the multiplier the head applies to the decode rate, held below the published figure',
+    },
     { key: 'bytes_per_weight', value: bytesPerWeight, source: 'FP16 and BF16 are both 2 bytes' },
     {
       key: 'kv_cache_dtype',
@@ -298,6 +346,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     'The model is served in FP16 or BF16 with no quantization. A quantized checkpoint is smaller and needs less hardware.',
     'The KV cache figure is the logical size of the cache. A serving engine adds its own overhead on top, for example page padding or per block alignment.',
     'The KV cache dtype is set in the cache layer and not by the weight precision. A narrower cache dtype lowers the cache size and therefore the VRAM. It never lowers the weight size, because the weights are still served in FP16 or BF16.',
+    'MTP is a property of the trained checkpoint. A head trained for one model does not transfer to another. The multiplier here is an estimate for measurement.',
     ...kv.assumptions,
   ]
 
@@ -327,8 +376,12 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     recommended,
     alternatives,
     closest,
+    mtpHead,
+    mtpSpeedup: mtpMultiplier,
     decodeTokensPerSecond,
     perSequenceTokensPerSecond,
+    baseDecodeTokensPerSecond,
+    basePerSequenceTokensPerSecond,
     kvHeadroomBytes,
     maxContextAtSequences,
     maxSequencesAtContext,

@@ -72,6 +72,14 @@ interface BreakdownProps {
   stepsExtra?: ReactNode
   /** Rendered as a panel of its own, between the steps and the constants. */
   extraPanels?: ReactNode
+  /**
+   * Panels a caller wants open on arrival, by their value.
+   *
+   * A panel is closed by default, because the summary above it is the answer. A
+   * tool opens one when its contents are the reason the reader came, for
+   * example the provenance of a figure the answer was scaled by.
+   */
+  defaultOpenPanels?: string[]
 }
 
 export default function Breakdown({
@@ -81,9 +89,10 @@ export default function Breakdown({
   constantsLabel = 'Config values used',
   stepsExtra,
   extraPanels,
+  defaultOpenPanels,
 }: BreakdownProps) {
   return (
-    <Accordion type="multiple" className="w-full">
+    <Accordion type="multiple" defaultValue={defaultOpenPanels} className="w-full">
       <AccordionItem value="steps">
         <AccordionTrigger className="text-sm">How this was calculated</AccordionTrigger>
         <AccordionContent>

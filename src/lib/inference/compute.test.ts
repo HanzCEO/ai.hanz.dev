@@ -9,9 +9,12 @@ import {
   ACTIVATION_BYTES_PER_ELEMENT,
   ACTIVATION_FACTOR,
   BYTES_PER_WEIGHT,
+  DEFAULT_MTP_HEAD,
+  MTP_HEADS,
   RUNTIME_OVERHEAD_BYTES,
+  mtpSpeedup,
 } from './presets'
-import { InferenceInputError, type InferenceInputs } from './types'
+import { InferenceInputError, type InferenceInputs, type MtpHeadType } from './types'
 
 const QWEN3_8B = loadConfigFixture('qwen3-8b')
 
@@ -451,5 +454,165 @@ describe('estimateInference explanations', () => {
     expect(result.bestEffort).toBe(true)
     // The cache shape had to be inferred, so the cache caveat is carried too.
     expect(result.notes.some((note) => note.includes('KV cache shape'))).toBe(true)
+  })
+})
+
+describe('estimateInference MTP heads', () => {
+  /** Every head except none, which is the baseline and not a head at all. */
+  const HEADS: MtpHeadType[] = ['sequential-mtp', 'parallel-mtp', 'medusa', 'eagle-3']
+
+  it('offers five heads, from none to EAGLE-3', () => {
+    expect(MTP_HEADS.map((head) => head.id)).toEqual([
+      'none',
+      'sequential-mtp',
+      'parallel-mtp',
+      'medusa',
+      'eagle-3',
+    ])
+    expect(MTP_HEADS.map((head) => head.speedup)).toEqual([1, 1.5, 1.4, 1.6, 2])
+    for (const head of MTP_HEADS) {
+      // Every row states the figure it was held to and where that figure came
+      // from, so a reader can check the number rather than trust it.
+      expect(head.published.trim()).not.toBe('')
+      expect(head.source.trim()).not.toBe('')
+      expect(head.hint.trim()).not.toBe('')
+    }
+  })
+
+  it('holds every applied multiplier at or below the published figure', () => {
+    for (const head of MTP_HEADS) {
+      // The published figure is a sentence, so the first number in it is the
+      // one the multiplier is held below.
+      const published = Number(/(\d+(?:\.\d+)?)/.exec(head.published)?.[1])
+      expect(Number.isFinite(published), head.id).toBe(true)
+      expect(head.speedup, head.id).toBeLessThanOrEqual(published)
+    }
+  })
+
+  it('treats an absent head as no head at all', () => {
+    const result = estimateInference(qwen3(), inputs(QWEN3_8B))
+    expect(result.mtpHead).toBe(DEFAULT_MTP_HEAD)
+    expect(result.mtpHead).toBe('none')
+    expect(result.mtpSpeedup).toBe(1)
+    expect(result.decodeTokensPerSecond).toBe(result.baseDecodeTokensPerSecond)
+    expect(result.perSequenceTokensPerSecond).toBe(result.basePerSequenceTokensPerSecond)
+  })
+
+  it('treats an explicit none as the same answer as an absent head', () => {
+    const absent = estimateInference(qwen3(), inputs(QWEN3_8B))
+    const explicit = estimateInference(qwen3(), inputs(QWEN3_8B, { mtpHead: 'none' }))
+    expect(explicit.decodeTokensPerSecond).toBe(absent.decodeTokensPerSecond)
+    expect(explicit.baseDecodeTokensPerSecond).toBe(absent.baseDecodeTokensPerSecond)
+  })
+
+  it('raises both rates by the multiplier of the head', () => {
+    const baseline = estimateInference(qwen3(), inputs(QWEN3_8B))
+    for (const head of HEADS) {
+      const result = estimateInference(qwen3(), inputs(QWEN3_8B, { mtpHead: head }))
+      const speedup = mtpSpeedup(head)
+      expect(result.mtpHead, head).toBe(head)
+      expect(result.mtpSpeedup, head).toBe(speedup)
+      // The roofline is the same figure whichever head is selected, because the
+      // head is a property of the checkpoint and not of the card.
+      expect(result.baseDecodeTokensPerSecond, head).toBeCloseTo(
+        baseline.decodeTokensPerSecond,
+        6,
+      )
+      expect(result.decodeTokensPerSecond, head).toBeCloseTo(
+        result.baseDecodeTokensPerSecond * speedup,
+        6,
+      )
+      expect(result.perSequenceTokensPerSecond, head).toBeCloseTo(
+        result.basePerSequenceTokensPerSecond * speedup,
+        6,
+      )
+      expect(result.decodeTokensPerSecond, head).toBeGreaterThan(baseline.decodeTokensPerSecond)
+    }
+  })
+
+  it('keeps the ratio of the batch rate to the single sequence rate', () => {
+    for (const head of HEADS) {
+      const result = estimateInference(qwen3(), inputs(QWEN3_8B, { sequences: 4, mtpHead: head }))
+      expect(result.decodeTokensPerSecond, head).toBeCloseTo(
+        result.perSequenceTokensPerSecond * 4,
+        6,
+      )
+    }
+  })
+
+  it('never moves a memory term, a verdict or a recommendation', () => {
+    const baseline = estimateInference(qwen3(), inputs(QWEN3_8B, { gpuFilter: ['rtx-4090'] }))
+    for (const head of HEADS) {
+      const result = estimateInference(
+        qwen3(),
+        inputs(QWEN3_8B, { gpuFilter: ['rtx-4090'], mtpHead: head }),
+      )
+      // The head adds a small number of weights against the whole checkpoint,
+      // so the hardware answer cannot change with it.
+      expect(result.weightsBytes, head).toBe(baseline.weightsBytes)
+      expect(result.kvCacheBytes, head).toBe(baseline.kvCacheBytes)
+      expect(result.activationBytes, head).toBe(baseline.activationBytes)
+      expect(result.runtimeReserveBytes, head).toBe(baseline.runtimeReserveBytes)
+      expect(result.totalBytes, head).toBe(baseline.totalBytes)
+      expect(result.verdict, head).toBe(baseline.verdict)
+      expect(result.recommended?.gpu.id, head).toBe(baseline.recommended?.gpu.id)
+      expect(result.recommended?.gpuCount, head).toBe(baseline.recommended?.gpuCount)
+      expect(result.recommended?.perCardBytes, head).toBe(baseline.recommended?.perCardBytes)
+      expect(result.maxContextAtSequences, head).toBe(baseline.maxContextAtSequences)
+    }
+  })
+
+  it('reports no throughput for any head when nothing fits', () => {
+    for (const head of HEADS) {
+      const result = estimateInference(
+        large(),
+        inputs(LARGE, { gpuFilter: ['rtx-4090'], maxGpus: 1, mtpHead: head }),
+      )
+      expect(result.verdict, head).toBe('none')
+      expect(result.decodeTokensPerSecond, head).toBe(0)
+      expect(result.baseDecodeTokensPerSecond, head).toBe(0)
+      expect(result.perSequenceTokensPerSecond, head).toBe(0)
+      expect(result.basePerSequenceTokensPerSecond, head).toBe(0)
+    }
+  })
+
+  it('rejects a head it does not know', () => {
+    try {
+      estimateInference(qwen3(), inputs(QWEN3_8B, { mtpHead: 'medusa-2' as MtpHeadType }))
+      throw new Error('the call should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(InferenceInputError)
+      expect((error as InferenceInputError).field).toBe('mtpHead')
+      expect((error as InferenceInputError).message).toContain('medusa-2')
+    }
+  })
+
+  it('names the head in a step, a constant and an assumption', () => {
+    const result = estimateInference(qwen3(), inputs(QWEN3_8B, { mtpHead: 'eagle-3' }))
+    const step = result.steps.find((entry) => entry.label === 'MTP head')
+    expect(step).toBeDefined()
+    expect(step?.detail).toContain('EAGLE-3 head')
+    expect(step?.detail).toContain('2x')
+    expect(step?.detail).toContain('estimate for measurement')
+
+    expect(result.constants.some((entry) => entry.key === 'mtp_head')).toBe(true)
+    expect(result.constants.some((entry) => entry.key === 'mtp_speedup')).toBe(true)
+    expect(
+      result.constants.find((entry) => entry.key === 'mtp_speedup')?.value,
+    ).toBe(2)
+
+    expect(
+      result.assumptions.some(
+        (line) => line.includes('does not transfer to another') && line.includes('estimate'),
+      ),
+    ).toBe(true)
+  })
+
+  it('says the answer stays on the roofline when no head is selected', () => {
+    const result = estimateInference(qwen3(), inputs(QWEN3_8B))
+    const step = result.steps.find((entry) => entry.label === 'MTP head')
+    expect(step).toBeDefined()
+    expect(step?.detail).toContain('roofline')
+    expect(step?.detail).toContain('estimate for measurement')
   })
 })
