@@ -89,6 +89,17 @@ export const INT32_BYTES = 4
 export const UINT8_BYTES = 1
 
 /**
+ * Bytes of training data on disk for each token the run reads.
+ *
+ * The published pipeline writes the regenerated answers as JSONL, so the data
+ * on disk is text rather than a tokenised array, and the token count does not
+ * set its size. English text runs at about four bytes for each token. The
+ * figure this produces is therefore an estimate of the data the run reads, and
+ * not a measured size.
+ */
+export const TRAINING_DATA_BYTES_PER_TOKEN = 4
+
+/**
  * The most cards the verdict will suggest before it stops recommending more
  * hardware and starts recommending offloading instead.
  */

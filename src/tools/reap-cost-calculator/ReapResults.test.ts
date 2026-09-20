@@ -91,6 +91,17 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
     expect(html).not.toContain('Active parameters per token are unchanged')
   })
 
+  it('does not claim a reduction when the setting removes nothing', () => {
+    // A prune ratio of zero keeps every expert, so nothing is pruned. The size
+    // card used to render "0.0 percent smaller" and to print the same parameter
+    // count twice as though it had fallen.
+    const zero = render(glm53Text, { pruneRatio: 0 })
+    expect(zero).not.toContain('0.0 percent smaller')
+    expect(zero).not.toContain('fall from')
+    expect(zero).toContain('Nothing is removed at this setting')
+    expect(zero).toContain('total parameter count is unchanged')
+  })
+
   it('reports the long run honestly at the paper recipe', () => {
     const html = render(glm53Text, {
       calibrationSamples: 24576,

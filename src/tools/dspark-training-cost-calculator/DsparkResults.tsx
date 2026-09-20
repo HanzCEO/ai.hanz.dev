@@ -169,9 +169,15 @@ export default function DsparkResults({
               <dt className="text-muted-foreground text-xs">Arithmetic alone</dt>
               <dd className="tabular-nums">{formatDuration(result.computeSeconds)}</dd>
             </div>
+            {offline && (
+              <div className="flex flex-col">
+                <dt className="text-muted-foreground text-xs">Target cache reads alone</dt>
+                <dd className="tabular-nums">{formatDuration(result.cacheReadSeconds)}</dd>
+              </div>
+            )}
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Target cache reads alone</dt>
-              <dd className="tabular-nums">{formatDuration(result.cacheReadSeconds)}</dd>
+              <dt className="text-muted-foreground text-xs">Training data on disk</dt>
+              <dd className="tabular-nums">{formatBytes(result.dataBytes).text}</dd>
             </div>
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">Drafter parameters</dt>
@@ -226,11 +232,16 @@ export default function DsparkResults({
                     </>
                   ) : (
                     <>
-                      Online capture keeps the target in VRAM and writes nothing. The run therefore
-                      needs no storage. It needs {formatBytes(result.targetWeightBytes).text} of
-                      VRAM for the target weights instead. The VRAM verdict below accounts for that.
+                      Online capture writes no target cache. The run needs{' '}
+                      {formatBytes(result.targetWeightBytes).text} of VRAM for the target weights
+                      instead. The VRAM verdict below accounts for that.
                     </>
                   )}
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  The training data needs {formatBytes(result.dataBytes).text} of storage. That is
+                  the regenerated text the run reads its tokens from, and the target cache does not
+                  replace it.
                 </p>
                 {offline && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
@@ -340,7 +351,7 @@ export default function DsparkResults({
                   <p className="text-sm text-emerald-700 dark:text-emerald-400">
                     {offline
                       ? `This run fits. The target cache still needs ${formatBytes(result.cacheBytes).text} of storage, and the target checkpoint needs its own space on top.`
-                      : 'This run fits. The run writes no target cache, so the target checkpoint is the only thing that needs storage.'}
+                      : `This run fits. The run writes no target cache, but the training data needs ${formatBytes(result.dataBytes).text} and the target checkpoint needs ${formatBytes(result.targetWeightBytes).text}, with the drafter checkpoints it writes on top.`}
                   </p>
                 )}
               </div>
@@ -365,10 +376,13 @@ export default function DsparkResults({
                 </p>
                 <p className="text-muted-foreground text-sm">
                   The backbone holds {formatExact(result.draftBackboneParams)}, and the projection
-                  from the captured target layers holds {formatExact(result.draftProjectionParams)}.
-                  The Markov head holds {formatExact(result.draftMarkovParams)}. The confidence head
-                  holds {formatExact(result.draftConfidenceParams)}. The embedding and the language
-                  model head are shared with the target and frozen. The run never trains them.
+                  from the captured target layers holds {formatExact(result.draftProjectionParams)}.{" "}
+                  {result.draftMarkovParams > 0
+                    ? `The Markov head holds ${formatExact(result.draftMarkovParams)}.`
+                    : 'The Markov head is disabled at rank 0, so the drafter is fully parallel.'}{" "}
+                  The confidence head holds {formatExact(result.draftConfidenceParams)}. The embedding
+                  and the language model head are shared with the target and frozen. The run never
+                  trains them.
                 </p>
                 <p className="text-muted-foreground text-sm">
                   At inference time, the drafter proposes {formatExact(result.blockSize)} candidate

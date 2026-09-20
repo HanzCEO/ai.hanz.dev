@@ -42,7 +42,12 @@ export default function DsparkBreakdown({ result }: { result: DsparkResult }) {
             rows={[
               ['Backbone', formatBytes(result.draftBackboneParams * 2).text],
               ['Feature projection', formatBytes(result.draftProjectionParams * 2).text],
-              ['Markov head', formatBytes(result.draftMarkovParams * 2).text],
+              [
+                'Markov head',
+                result.draftMarkovParams > 0
+                  ? formatBytes(result.draftMarkovParams * 2).text
+                  : 'disabled at rank 0',
+              ],
               ['Confidence head', formatBytes(result.draftConfidenceParams * 2).text],
               ['Total in bf16', formatBytes(result.draftWeightBytes).text],
               ['Shared and frozen', formatBytes(result.shape.totalParams * 2).text],

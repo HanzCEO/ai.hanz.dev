@@ -334,9 +334,31 @@ describe('offline against online', () => {
     expect(online.cacheReadSeconds).toBe(0)
     // With nothing to read, the run can only be bound by compute.
     expect(online.bound).toBe('compute')
-    // Online also skips the target forward pass that builds the cache.
-    expect(online.cachePrepFlops).toBe(0)
-    expect(online.totalFlops).toBeLessThan(offline.totalFlops)
+    // Online has no cache to read, so the target runs forward again in every
+    // epoch rather than once during preparation. Over ten epochs that costs
+    // more arithmetic than the offline run, not less.
+    expect(online.totalFlops).toBeGreaterThan(offline.totalFlops)
+  })
+
+  it('pays the target forward pass once an epoch when it captures online', () => {
+    // The online run used to report a cache preparation cost of zero, which made
+    // it look cheaper than an offline run over the same recipe. It is the other
+    // way round: offline runs the target forward once, online runs it every epoch.
+    const onePass = 2 * 64 * TINY.activeParamsPerToken
+    const offline = estimateDspark(TINY, tinyInputs({ dataMode: 'offline', epochs: 3 }))
+    const online = estimateDspark(TINY, tinyInputs({ dataMode: 'online', epochs: 3 }))
+    expect(offline.cachePrepFlops).toBe(onePass)
+    expect(online.cachePrepFlops).toBe(onePass * 3)
+    expect(online.totalFlops).toBeGreaterThan(offline.totalFlops)
+  })
+
+  it('sizes the training data in both modes', () => {
+    // The cache holds hidden states and not tokens, so it does not replace the
+    // text the run reads. The data figure therefore applies to online capture too.
+    const offline = estimateDspark(QWEN, inputs({ dataMode: 'offline', storage: hostRam }))
+    const online = estimateDspark(QWEN, inputs({ dataMode: 'online', storage: hostRam }))
+    expect(offline.dataBytes).toBe(1_237_000_000 * 4)
+    expect(online.dataBytes).toBe(offline.dataBytes)
   })
 
   it('keeps the target resident online and not offline', () => {

@@ -109,6 +109,12 @@ export interface DsparkResult {
   cacheBytes: number
   cacheWriteSeconds: number
   cacheReadSeconds: number
+  /**
+   * The regenerated training data on disk, estimated from the token count. It
+   * applies in both modes, because the target cache holds hidden states and
+   * does not replace the text the run reads its tokens from.
+   */
+  dataBytes: number
 
   // --- The draft model ----------------------------------------------------
   draftBackboneParams: number

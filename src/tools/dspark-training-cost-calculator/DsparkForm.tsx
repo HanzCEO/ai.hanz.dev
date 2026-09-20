@@ -425,7 +425,7 @@ export default function DsparkForm({
           <p className="text-xs text-muted-foreground">
             {inputs.dataMode === 'offline'
               ? 'The run reads the target cache back in each epoch. This setting therefore decides whether the GPU or the storage sets the bound.'
-              : 'Online capture writes nothing, so this setting only changes where the run reads the target checkpoint.'}
+              : 'Online capture reads no target cache back, so this setting does not change the estimate.'}
           </p>
         </div>
 

@@ -257,6 +257,18 @@ describe('estimateReap pruning arithmetic', () => {
     expect(result.reductionPercent).toBe(0)
     expect(result.activeParamsPerTokenAfter).toBe(shape.activeParamsPerToken)
   })
+
+  it('does not report a zero reduction as a percentage', () => {
+    // A ratio of zero keeps every expert. The step used to render "That removes
+    // 0.0 percent of the parameters", which asserts a reduction that did not
+    // happen.
+    const result = estimateReap(shape, inputs({ pruneRatio: 0 }))
+    const step = result.steps.find((entry) => entry.label === 'After pruning')
+    expect(step).toBeDefined()
+    expect(step?.detail).not.toContain('0.0 percent')
+    expect(step?.detail).not.toContain('percent of the parameters')
+    expect(step?.detail).toContain('removes nothing')
+  })
 })
 
 describe('estimateReap storage and memory', () => {

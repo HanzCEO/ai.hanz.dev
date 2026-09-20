@@ -60,7 +60,14 @@ export function formatTokens(tokens: number): string {
  */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return 'no time'
-  if (seconds < 90) return `${Math.round(seconds)} seconds`
+  // A positive duration below a second is real work, so it must not round down
+  // to "0 seconds" and read as no work at all.
+  if (seconds < 1) return 'less than a second'
+  if (seconds < 90) {
+    const whole = Math.round(seconds)
+    // The unit has to agree with the value, so a rounded 1 is singular.
+    return `${whole} ${whole === 1 ? 'second' : 'seconds'}`
+  }
   const minutes = seconds / 60
   if (minutes < 90) return `${minutes < 10 ? minutes.toFixed(1) : Math.round(minutes)} minutes`
   const hours = seconds / 3600

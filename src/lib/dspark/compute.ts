@@ -8,6 +8,7 @@ import {
   MAX_SUGGESTED_GPUS,
   OPTIMIZER_BYTES_PER_PARAM,
   RUNTIME_OVERHEAD_BYTES,
+  TRAINING_DATA_BYTES_PER_TOKEN,
   UINT8_BYTES,
 } from './presets'
 import {
@@ -92,6 +93,10 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     UINT8_BYTES
 
   const cacheBytes = offline ? cacheBytesPerToken * inputs.trainingTokens : 0
+  // The training data on disk is the regenerated text, and the cache holds
+  // hidden states rather than tokens, so the cache does not replace it. This
+  // applies in both modes.
+  const dataBytes = inputs.trainingTokens * TRAINING_DATA_BYTES_PER_TOKEN
   const storageBytesPerSecond = inputs.storage.bandwidthGBs * 1e9
   const cacheWriteSeconds = cacheBytes / storageBytesPerSecond
 
@@ -146,8 +151,13 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     sequencesPerEpoch *
     inputs.epochs
 
-  // Building the cache is one forward pass of the target over every token.
-  const cachePrepFlops = offline ? 2 * inputs.trainingTokens * shape.activeParamsPerToken : 0
+  // The target runs forward over every token of the training set. Offline does
+  // that once, while it builds the cache, and then reads the cache back in each
+  // epoch. Online has no cache to read, so it pays the same pass again in every
+  // epoch, which makes an online run cost more arithmetic than an offline one
+  // over the same recipe.
+  const targetForwardFlops = 2 * inputs.trainingTokens * shape.activeParamsPerToken
+  const cachePrepFlops = offline ? targetForwardFlops : targetForwardFlops * inputs.epochs
 
   const totalFlops = trainingFlops + contextFlops + cachePrepFlops
 
@@ -226,11 +236,11 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
       label: offline ? 'Target cache' : 'No target cache',
       detail: offline
         ? `One token needs ${formatExact(cacheBytesPerToken)} bytes, so ${tokensPerEpoch} tokens need ${formatBytes(cacheBytes).text}. The run writes this cache once and reads it back in each epoch.`
-        : 'Online capture keeps the target in VRAM and writes nothing. The run therefore needs no storage. It needs the target in VRAM instead.',
+        : 'Online capture writes no target cache. The training data, the target checkpoint, and the drafter checkpoints the run writes still need storage. The target needs VRAM for its weights instead of a cache on disk.',
     },
     {
       label: 'Drafter parameters',
-      detail: `The ${inputs.numDraftLayers} backbone blocks hold ${formatExact(draftBackboneParams)} parameters. The projection from the captured layers holds ${formatExact(draftProjectionParams)}. The Markov head at rank ${inputs.markovRank} holds ${formatExact(draftMarkovParams)}. The confidence head holds ${formatExact(draftConfidenceParams)}. The embedding and the language model head are shared with the target and frozen. The run therefore does not train them.`,
+      detail: `The ${inputs.numDraftLayers} backbone blocks hold ${formatExact(draftBackboneParams)} parameters. The projection from the captured layers holds ${formatExact(draftProjectionParams)}. ${inputs.markovRank > 0 ? `The Markov head at rank ${inputs.markovRank} holds ${formatExact(draftMarkovParams)}.` : 'The Markov head is disabled at rank 0, so the drafter is fully parallel and that head holds no parameters.'} The confidence head holds ${formatExact(draftConfidenceParams)}. The embedding and the language model head are shared with the target and frozen. The run therefore does not train them.`,
     },
     {
       label: 'Positions scored',
@@ -238,7 +248,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'Arithmetic',
-      detail: `6 FLOPs for each parameter and each position gives ${trainingFlops.toExponential(3)}. The context that each block attends to adds ${contextFlops.toExponential(3)}. Preparing the target cache adds ${cachePrepFlops.toExponential(3)}. The total is ${totalFlops.toExponential(3)} FLOPs.`,
+      detail: `6 FLOPs for each parameter and each position gives ${trainingFlops.toExponential(3)}. The context that each block attends to adds ${contextFlops.toExponential(3)}. ${offline ? `Preparing the target cache adds ${cachePrepFlops.toExponential(3)}.` : `The target runs forward once in each of the ${inputs.epochs} epochs to capture the hidden states, which adds ${cachePrepFlops.toExponential(3)}.`} The total is ${totalFlops.toExponential(3)} FLOPs.`,
     },
     {
       label: 'Arithmetic duration',
@@ -292,8 +302,11 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     'The drafter shares the target embedding and language model head, and the run freezes both. The run does not train either one, and neither appears in the drafter parameter count. The paper and both published implementations do this.',
     'Each drafter block attends to the target context before its anchor, and to itself in both directions. The context term therefore scales with the sequence length. That term is smaller than the block arithmetic at every setting in the recipes.',
     'The run trains every position in a block in 1 parallel pass. The arithmetic is therefore 6 FLOPs for each drafter parameter and each position. It does not depend on the sequence length. This is why a drafter over a billion tokens is affordable.',
-    'The target cache stores bf16 hidden states, int32 token ids, and uint8 masks. This matches the layout that DeepSpec writes. Fewer captured layers make the target cache smaller in proportion. That is the first control when the storage is too small.',
-    'Target cache preparation is 1 forward pass of the target over the whole training set. Its cost therefore scales with the target and not with the drafter. The estimate includes it, because it is large for a large target.',
+    'The target cache stores bf16 hidden states, int32 token ids, and uint8 masks. This matches the layout that DeepSpec writes.',
+    'The training data on disk is the regenerated text, and not a tokenised array. English text runs at about 4 bytes for each token, so the size this calculator reports is an estimate of the data the run reads rather than a measured size.',
+    offline
+      ? 'Target cache preparation is 1 forward pass of the target over the whole training set. Its cost therefore scales with the target and not with the drafter. The estimate includes it, because it is large for a large target.'
+      : `Online capture does no separate preparation pass, because the target runs forward inside the training loop. The estimate pays that pass once for each of the ${inputs.epochs} epochs, so an online run costs more arithmetic than an offline one over the same recipe.`,
     'The optimizer state is 2 fp32 Adam moments, or 8 bytes for each parameter. The calculator counts the bf16 weights and the gradients separately. The total is therefore 12 bytes for each parameter, plus the activations.',
     'The activation buffer is an estimate of the live intermediates in the drafter forward pass. It is not a measured value. Lower the micro batch if the real run runs out of VRAM.',
     'Model flops utilisation covers the kernel efficiency. A shallow drafter over short blocks reaches a smaller share of the peak than a large model does. One third is therefore optimistic. Trust the estimate and not the raw FLOPs.',
@@ -302,6 +315,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     ...(offline
       ? [
           'The target cache sits on one store. Every card reads it over the same link, so the read duration does not fall as the card count rises. Raising the card count can therefore move the bound from the arithmetic to the cache read.',
+          'Fewer captured layers make the target cache smaller in proportion. That is the first control when the storage is too small.',
         ]
       : []),
     anchorsClamped
@@ -319,6 +333,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     cacheBytes,
     cacheWriteSeconds,
     cacheReadSeconds,
+    dataBytes,
     draftBackboneParams,
     draftProjectionParams,
     draftMarkovParams,

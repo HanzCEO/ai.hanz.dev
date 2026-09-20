@@ -259,19 +259,21 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
               />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
-                  The run keeps {formatExact(result.keptExperts)} of{' '}
-                  {formatExact(shape.routedExperts)} experts. The model is{' '}
-                  {result.reductionPercent.toFixed(1)} percent smaller.
+                  {result.removedExperts === 0
+                    ? `The run keeps all ${formatExact(shape.routedExperts)} experts. Nothing is removed at this setting.`
+                    : `The run keeps ${formatExact(result.keptExperts)} of ${formatExact(shape.routedExperts)} experts. The model is ${result.reductionPercent.toFixed(1)} percent smaller.`}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  The expert parameters fall from {formatBytes(shape.routedExpertParams * 2).text} to{' '}
-                  {formatBytes(result.expertParamsAfter * 2).text} in BF16. The total parameters fall
-                  from {formatExact(shape.totalParams)} to {formatExact(result.totalParamsAfter)}.
+                  {result.removedExperts === 0
+                    ? `The expert parameters stay at ${formatBytes(shape.routedExpertParams * 2).text} in BF16, and the total parameter count is unchanged at ${formatExact(shape.totalParams)}.`
+                    : `The expert parameters fall from ${formatBytes(shape.routedExpertParams * 2).text} to ${formatBytes(result.expertParamsAfter * 2).text} in BF16. The total parameters fall from ${formatExact(shape.totalParams)} to ${formatExact(result.totalParamsAfter)}.`}
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-400">
-                  {result.activeParamsPerTokenAfter === shape.activeParamsPerToken
-                    ? 'Active parameters per token are unchanged, because a token still goes to the same number of experts. REAP saves VRAM, but not time, unless the run also reduces the router top-k.'
-                    : `Reducing the top-k to ${result.expertsPerTokenAfter} also cuts the active parameters to ${formatExact(result.activeParamsPerTokenAfter)}. That change is the source of the faster inference.`}
+                  {result.removedExperts === 0
+                    ? 'Nothing is removed at this setting, so neither the VRAM nor the time changes.'
+                    : result.activeParamsPerTokenAfter === shape.activeParamsPerToken
+                      ? 'Active parameters per token are unchanged, because a token still goes to the same number of experts. REAP saves VRAM, but not time, unless the run also reduces the router top-k.'
+                      : `Reducing the top-k to ${result.expertsPerTokenAfter} also cuts the active parameters to ${formatExact(result.activeParamsPerTokenAfter)}. That change is the source of the faster inference.`}
                 </p>
               </div>
             </div>

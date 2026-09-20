@@ -242,7 +242,10 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
     },
     {
       label: 'After pruning',
-      detail: `The run keeps ${keptExperts.toLocaleString('en-US')} of ${routedExperts.toLocaleString('en-US')} experts in each expert block. That removes ${(reductionPercent).toFixed(1)} percent of the parameters.`,
+      detail:
+        removedExperts === 0
+          ? `The run keeps all ${routedExperts.toLocaleString('en-US')} experts in each expert block, so this recipe removes nothing.`
+          : `The run keeps ${keptExperts.toLocaleString('en-US')} of ${routedExperts.toLocaleString('en-US')} experts in each expert block. That removes ${(reductionPercent).toFixed(1)} percent of the parameters.`,
     },
   ]
 

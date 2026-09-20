@@ -185,8 +185,28 @@ describe('DsparkResults with a pasted target config', () => {
     // cache size and read "the target cache still needs 0 B of storage".
     const online = visibleText(render(QWEN3_4B, { dataMode: 'online' }))
     expect(online).toContain('Fits')
-    expect(online).toContain('the target checkpoint is the only thing that needs storage')
+    expect(online).toContain('the drafter checkpoints it writes on top')
     expect(online).not.toContain('0 B')
+  })
+
+  it('names the storage an online run still needs', () => {
+    // Online capture removes the target cache and nothing else. The training
+    // data, the target checkpoint, and the drafter checkpoints the run writes
+    // all still need disk, so the panel must not claim the run needs no storage.
+    const online = visibleText(render(QWEN3_4B, { dataMode: 'online' }))
+    expect(online).toContain('The training data needs')
+    expect(online).toContain('the regenerated text the run reads its tokens from')
+    expect(online).not.toContain('needs no storage')
+  })
+
+  it('renders no meaningless zero in the online figures', () => {
+    // Online zeroes the cache size and the cache read time. Both used to reach
+    // the screen: a "Target cache reads alone" tile reading "no time", and a
+    // cache paragraph claiming the run needs no storage.
+    const online = visibleText(render(QWEN3_4B, { dataMode: 'online' }))
+    expect(online).not.toContain('no time')
+    expect(online).not.toContain('0 B')
+    expect(online).not.toContain('Target cache reads alone')
   })
 
   it('reports the target cache size when the run fits offline', () => {
@@ -194,6 +214,27 @@ describe('DsparkResults with a pasted target config', () => {
     expect(offline).toContain('Fits')
     expect(offline).toContain('The target cache still needs')
     expect(offline).not.toContain('0 B')
+  })
+
+  it('sizes the training data in both modes', () => {
+    // The cache holds hidden states and not tokens, so it does not replace the
+    // text the run reads. The data figure therefore shows in both modes.
+    expect(visibleText(render(QWEN3_4B, { dataMode: 'offline' }))).toContain(
+      'Training data on disk',
+    )
+    expect(visibleText(render(QWEN3_4B, { dataMode: 'online' }))).toContain(
+      'Training data on disk',
+    )
+  })
+
+  it('says the Markov head is disabled at rank 0 rather than holding zero', () => {
+    // Rank 0 is legal, and the form advertises it as the way to get a fully
+    // parallel drafter. The panel used to interpolate the zeroed parameter count
+    // and read "The Markov head holds 0", and the breakdown printed a 0 B row.
+    const zero = visibleText(render(QWEN3_4B, { markovRank: 0 }))
+    expect(zero).toContain('disabled at rank 0')
+    expect(zero).not.toContain('holds 0')
+    expect(zero).not.toContain('0 B')
   })
 
   it('becomes bound by the cache read on a slow disk', () => {
