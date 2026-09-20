@@ -31,10 +31,10 @@ describe('DSPARK_SCHEMA', () => {
     expect(defaults.dataMode).toBe('offline')
     // The recipe OpenBMB published: 1,959,525 sequences read six times.
     expect(defaults.samples).toBe('1959525')
-    expect(defaults.sequenceLength).toBe('600')
+    expect(defaults.sequenceLength).toBe('3600')
     expect(defaults.epochs).toBe('6')
     // Anchors are not published, so they open at one block per sequence token.
-    expect(defaults.numAnchors).toBe('85')
+    expect(defaults.numAnchors).toBe('514')
   })
 
   it('opens on MiniCPM5-2B as the target', () => {
@@ -86,7 +86,7 @@ describe('DSPARK_SCHEMA', () => {
 
 describe('activePresetId', () => {
   it('recognises the MiniCPM5-2B-DSpark recipe', () => {
-    expect(activePresetId('1959525', '600', '6')).toBe('minicpm5-2b-dspark')
+    expect(activePresetId('1959525', '3600', '6')).toBe('minicpm5-2b-dspark')
   })
 
   it('recognises the DeepSpec paper recipe', () => {

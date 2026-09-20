@@ -503,20 +503,23 @@ const MINICPM = shapeFrom(MINICPM_TARGET)
 /**
  * The MiniCPM5-2B-DSpark recipe, as OpenBMB published it.
  *
- * The card gives 1,959,525 sequences and 7,054,154,509 tokens over 6 epochs,
- * which is 600 tokens per sequence per epoch. Anchors are not published, so they
- * are set to one block per sequence token.
+ * The card gives 1,959,525 sequences and 7,054,154,509 tokens. That figure is
+ * one pass and not the six-epoch total. The cache is written once and read once
+ * per epoch, so every epoch covers the same tokens and a six-epoch total is
+ * always a multiple of six. This figure is odd, so it cannot be one. The pass is
+ * therefore 7.05 billion tokens, or 3,599.93 for each sequence. Anchors are not
+ * published, so they are set to one block per sequence token.
  */
 function minicpmInputs(overrides: Partial<DsparkInputs> = {}): DsparkInputs {
   return inputs({
     numTargetLayers: 5,
-    trainingTokens: 1_959_525 * 600,
+    trainingTokens: 1_959_525 * 3600,
     epochs: 6,
-    numAnchors: 85,
+    numAnchors: 514,
     blockSize: 7,
     numDraftLayers: 5,
     markovRank: 256,
-    sequenceLength: 600,
+    sequenceLength: 3600,
     ...overrides,
   })
 }
@@ -552,12 +555,25 @@ describe('the published MiniCPM5-2B-DSpark recipe', () => {
   })
 
   it('reproduces the published training token count', () => {
-    // The card gives 7,054,154,509 tokens over 6 epochs, which is 1,175,692,418
-    // per epoch, or 599.99 tokens for each of 1,959,525 sequences.
-    const perEpoch = 1_959_525 * 600
-    expect(perEpoch).toBe(1_175_715_000)
-    expect(Math.abs(perEpoch * 6 - 7_054_154_509) / 7_054_154_509).toBeLessThan(0.0001)
-    expect(Math.abs(perEpoch - 1_175_692_418.1666)).toBeLessThan(25_000)
+    // 1,959,525 sequences of about 3,600 tokens is 7.05 billion tokens for one
+    // pass, which is the figure the card gives.
+    const perPass = 1_959_525 * 3600
+    expect(perPass).toBe(7_054_290_000)
+    expect(Math.abs(perPass - 7_054_154_509) / 7_054_154_509).toBeLessThan(0.0001)
+    // The sequences vary in length, so the average lands just under 3,600.
+    expect(7_054_154_509 / 1_959_525).toBeCloseTo(3599.93, 2)
+  })
+
+  it('reads the card token count as one pass, not as the six epoch total', () => {
+    // The cache is prepared once and read once per epoch, so each epoch covers
+    // the same tokens and a six epoch total is a multiple of six. The published
+    // figure is not, which is what makes it one pass rather than six.
+    expect(7_054_154_509 % 2).toBe(1)
+    expect(7_054_154_509 % 6).toBe(1)
+    // Six passes over that set is 42.3 billion tokens of arithmetic.
+    expect(1_959_525 * 3600 * 6).toBe(42_325_740_000)
+    const publishedTotal = 7_054_154_509 * 6
+    expect(Math.abs(1_959_525 * 3600 * 6 - publishedTotal) / publishedTotal).toBeLessThan(0.0001)
   })
 
   it('counts the target parameters the way the checkpoint does', () => {
@@ -574,7 +590,7 @@ describe('the published MiniCPM5-2B-DSpark recipe', () => {
     // ids and two uint8 masks.
     expect(result.cacheBytesPerToken).toBe(5 * 2048 * 2 + 2048 * 2 + 4 + 1 + 1)
     expect(result.cacheBytesPerToken).toBe(24_582)
-    expect(result.cacheBytes).toBe(24_582 * 1_175_715_000)
+    expect(result.cacheBytes).toBe(24_582 * 7_054_290_000)
   })
 
   it('reads the target as a dense model with no expert bank', () => {
@@ -587,18 +603,18 @@ describe('the published MiniCPM5-2B-DSpark recipe', () => {
 
 describe('the anchor cap', () => {
   it('caps anchors at one block per sequence token', () => {
-    // The DeepSpec default of 512 anchors assumes a long sequence. Pointed at a
-    // 600 token sequence it would score more positions than the sequence holds.
-    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 512 }))
-    expect(result.numAnchors).toBe(85)
+    // A 3,600 token sequence holds 514 blocks of 7. Asking for more would score
+    // more positions than the sequence holds.
+    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 600 }))
+    expect(result.numAnchors).toBe(514)
     expect(result.anchorsClamped).toBe(true)
     // The cap is what keeps supervision inside the data.
     expect(result.positionsPerEpoch).toBeLessThanOrEqual(result.trainingTokens)
   })
 
   it('leaves an anchor count that fits alone', () => {
-    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 85 }))
-    expect(result.numAnchors).toBe(85)
+    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 514 }))
+    expect(result.numAnchors).toBe(514)
     expect(result.anchorsClamped).toBe(false)
   })
 
@@ -610,10 +626,10 @@ describe('the anchor cap', () => {
   })
 
   it('says so in the steps and the assumptions when it caps', () => {
-    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 512 }))
+    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 600 }))
     const steps = result.steps.map((step) => step.detail).join(' ')
-    expect(steps).toContain('were reduced to 85')
-    expect(result.assumptions.some((line) => line.includes('caps the anchor count at 85'))).toBe(true)
+    expect(steps).toContain('were reduced to 514')
+    expect(result.assumptions.some((line) => line.includes('caps the anchor count at 514'))).toBe(true)
   })
 })
 

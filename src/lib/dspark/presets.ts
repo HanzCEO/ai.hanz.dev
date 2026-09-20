@@ -122,7 +122,7 @@ export function presetTrainingTokens(preset: DsparkPreset): number {
  *
  * The last two are real runs whose settings their authors published, and they
  * differ in an instructive way. DeepSeek read 1.24 billion tokens ten times.
- * OpenBMB read 7.05 billion tokens six times, so five times as much unique data
+ * OpenBMB read 7.05 billion tokens six times, so 5.7 times as much unique data
  * with less repetition, and published the acceptance length it bought them.
  */
 export const DSPARK_PRESETS: DsparkPreset[] = [
@@ -157,10 +157,10 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     id: 'minicpm5-2b-dspark',
     label: 'MiniCPM5-2B-DSpark recipe',
     samples: 1_959_525,
-    sequenceLength: 600,
+    sequenceLength: 3600,
     epochs: 6,
-    numAnchors: 85,
-    note: 'The recipe OpenBMB published for openbmb/MiniCPM5-2B-DSpark: 1,959,525 sequences read 6 times, which is 7.05 billion tokens. That is 5 times the unique data of the paper recipe. Their published drafter checkpoint is 323,776,001 parameters and reaches an acceptance length of 5.52 at temperature 0.',
+    numAnchors: 514,
+    note: 'The recipe OpenBMB published for openbmb/MiniCPM5-2B-DSpark: 1,959,525 sequences of about 3,600 tokens, which is 7.05 billion tokens for each pass, read 6 times. That is 42.3 billion tokens of arithmetic over 5.7 times the unique data of the paper recipe. Their published drafter checkpoint is 323,776,001 parameters and reaches an acceptance length of 5.52 at temperature 0.',
   },
 ]
 
