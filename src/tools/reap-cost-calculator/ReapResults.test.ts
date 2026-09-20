@@ -150,7 +150,7 @@ describe('ReapResults in the idle and error states', () => {
         computeError: null,
       }),
     )
-    expect(html).toContain('Could not read that config')
+    expect(html).toContain('The calculator cannot read that config')
     expect(html).toContain('That is not valid JSON.')
   })
 

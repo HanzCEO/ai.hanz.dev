@@ -242,7 +242,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'VRAM',
-      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16. The optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}. The activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text}.`} The peak is therefore ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM on the GPU.`,
+      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16, and the optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}, and the activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text}.`} The peak is therefore ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM on the GPU.`,
     },
   ]
 
@@ -284,7 +284,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     'Model flops utilisation covers the kernel efficiency. A shallow drafter over short blocks reaches a smaller share of the peak than a large model does. One third is therefore optimistic. Trust the estimate and not the raw FLOPs.',
     'The overhead factor covers the data loader, the cache reader, the checkpoint writer, and the scheduler. None of these appear in the FLOPs.',
     anchorsClamped
-      ? `The run caps the anchor count at ${formatExact(numAnchors)} for each sequence, which is 1 block for each sequence token. The requested ${formatExact(inputs.numAnchors)} anchors would score more positions than a ${formatExact(inputs.sequenceLength)} token sequence holds. Raise the sequence length or lower the anchor count to change this.`
+      ? `The run caps the anchor count at ${formatExact(numAnchors)} for each sequence, which is 1 block for each sequence token. A ${formatExact(inputs.sequenceLength)} token sequence cannot hold the requested ${formatExact(inputs.numAnchors)} anchors. Raise the sequence length or lower the anchor count to change this.`
       : 'The anchor count fits the sequence length. The run therefore scores every requested block.',
     'The run trains the confidence head together with the drafter. Good output at serving time needs post-hoc scaling on held-out data. That work is not part of this estimate.',
     ...shape.notes,

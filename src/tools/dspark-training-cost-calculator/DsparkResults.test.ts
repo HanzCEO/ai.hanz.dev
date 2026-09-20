@@ -215,7 +215,7 @@ describe('DsparkResults in the idle, error and compute error states', () => {
         computeError: null,
       }),
     )
-    expect(html).toContain('Could not read the target config')
+    expect(html).toContain('The calculator cannot read the target config')
     expect(html).toContain('That config does not describe a decoder.')
   })
 

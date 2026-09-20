@@ -62,7 +62,7 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
   const tiedEmbeddings = readBoolean(inner, 'tie_word_embeddings') === true
   if (!tiedEmbeddings && readBoolean(inner, 'tie_word_embeddings') === undefined) {
     notes.push(
-      'The config does not say whether the embedding and the language model head are tied. The calculator therefore counts them separately. A tied model would be one embedding table smaller.',
+      'The config does not say whether the embedding and the language model head are tied. The calculator therefore counts them separately. A tied model is one embedding table smaller.',
     )
   }
 

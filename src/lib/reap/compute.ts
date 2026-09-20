@@ -264,7 +264,7 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
   ]
 
   const assumptions = [
-    'The experts use SwiGLU. Each expert therefore carries 3 projections: gate, up, and down. An expert with 2 projections would be one third smaller.',
+    'The experts use SwiGLU. Each expert therefore carries 3 projections: gate, up, and down. An expert with 2 projections is one third smaller.',
     'The calculator counts the attention parameters once and applies them to every block. A hybrid model has linear layers that differ from its full attention layers. For that model, this is an approximation.',
     'The calculator leaves the router out of the active parameter count. The router is 1 small matmul in each block. That is less than 1 percent of the block here.',
     'The calibration uses the layer-wise observer. That observer keeps one expert block in VRAM at a time. Therefore one GPU is sufficient.',

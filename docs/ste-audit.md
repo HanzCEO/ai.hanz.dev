@@ -3,12 +3,28 @@
 Scope: every user-visible string of the REAP Cost Calculator and the DSpark
 Training Cost Calculator.
 
-Method: a throwaway script rendered both results panels and both forms through
-`react-dom/server` across every runtime branch, then stripped the markup and
-counted words in the text a reader actually sees. Sentences were counted after
-the interpolation values were substituted, because a sentence that spans an
-expression reads differently on screen than it does in the source. The built
-`dist` HTML of both routes was checked the same way.
+## Method
+
+Three independent passes, because no single one of them sees every string:
+
+1. **Rendered output.** A throwaway test rendered both results panels and both
+   forms through `react-dom/server` across every runtime branch, then stripped
+   the markup and measured the text a reader sees. Sentences were counted after
+   the interpolation values were substituted, because a sentence that spans an
+   expression reads differently on screen than it does in the source.
+2. **Runtime strings.** A second throwaway test called `estimateReap`,
+   `estimateDspark`, `detectMoeShape`, and `detectDsparkShape` directly and
+   dumped every `steps[].label`, `steps[].detail`, `constants[].source` and
+   `assumptions[]` string, with real values substituted. This is the copy that
+   the collapsed breakdown accordion hides from a server render, and it is the
+   only way to measure it.
+3. **Source literals.** A third pass walked every string literal in the changed
+   files, substituted each interpolation with the longest value its slot can
+   hold, and checked the rules. This catches copy that only renders in a state
+   the two passes above did not reach.
+
+The built `dist` HTML of both routes was checked with the first pass, with the
+FAQ section cut off.
 
 Branches covered:
 
@@ -21,26 +37,51 @@ Branches covered:
   compute error states.
 - Both forms: 3 input modes x a named recipe and a custom one x 2 data modes,
   plus the invalid-field and single-epoch branches.
-- The prerendered HTML of both routes, with the FAQ section excluded.
+- Runtime strings: 2,380 strings from 14 REAP configs and 8 DSpark configs x 7
+  variants.
 
-Total rendered text: 7,141 lines. The FAQ questions and answers, the SEO
-metadata, the tool card descriptions, the shared components, and the shared
-libraries are out of scope and unchanged.
+Totals: 6,857 rendered blocks, 2,380 runtime strings, 197 source literals.
+
+The FAQ questions and answers, the SEO metadata, the tool card descriptions, the
+shared components, and the shared libraries are out of scope and unchanged.
 
 ## Rules checked
 
 | Rule | Requirement | Result |
 | --- | --- | --- |
 | 1.1 | Use approved words only | Not applied, by decision. The approved-word dictionary would remove the domain terms the pages exist to explain. |
-| 1.6 | Do not use contractions | Pass. 0 found. |
+| 1.6 | Do not use contractions | Pass. 0 found in any of the three passes. |
 | 2.1 | Maximum 3 words in a noun cluster | Pass, with the exceptions listed below. |
-| 3.2 | Use the simple present or simple past tense | Pass. No perfect tense, and no `would`, `could`, `should`, `may`, or `might`. |
+| 3.2 | Use the simple present or simple past tense | Pass. 0 occurrences of `would`, `could`, `should`, `may`, or `might`, and no perfect tense, in any user-visible string. |
 | 3.5 | Use the `-ing` form only as a noun or a modifier | Pass. No `-ing` verb form carries the action of a sentence. |
-| 4.1 | Maximum 20 words in a sentence | Pass. The longest rendered sentence is 19 words. |
-| 4.3 | Maximum 6 sentences in a paragraph | Pass. The longest rendered paragraph is 5 sentences. |
+| 4.1 | Maximum 20 words in a sentence | Pass. The longest rendered sentence is 19 words, and the longest runtime string sentence is 19 words. |
+| 4.3 | Maximum 6 sentences in a paragraph | Pass. The longest rendered paragraph is 5 sentences, and the longest runtime string paragraph is 6 sentences. |
 | 8.1 | Do not use the semicolon | Pass. 0 found. |
 | 8.4 | Do not use the em dash or the en dash | Pass. 0 found. |
 | Glossary | One term for one concept across both pages | Pass. See the term list below. |
+
+### Modals removed in the last pass
+
+The modal rule caught six strings that earlier passes missed, because they only
+render in a state the first pass did not reach. Each one now uses the simple
+present tense:
+
+| Location | Before | After |
+| --- | --- | --- |
+| `src/lib/reap/compute.ts` assumption | An expert with 2 projections would be one third smaller. | An expert with 2 projections is one third smaller. |
+| `src/tools/reap-cost-calculator/ReapResults.tsx` alert title | Could not read that config | The calculator cannot read that config |
+| `src/routes/ReapCostCalculator.tsx` fallback error | Those inputs could not be costed. | The calculator cannot cost those inputs. |
+| `src/lib/dspark/compute.ts` assumption | The requested N anchors would score more positions than a M token sequence holds. | A M token sequence cannot hold the requested N anchors. |
+| `src/lib/dspark/shape.ts` note | A tied model would be one embedding table smaller. | A tied model is one embedding table smaller. |
+| `src/tools/dspark-training-cost-calculator/DsparkResults.tsx` alert title | Could not read the target config | The calculator cannot read the target config |
+| `src/tools/dspark-training-cost-calculator/DsparkResults.tsx` clamp note | The requested count would score more positions than the sequence holds. | The sequence cannot hold the requested count. |
+| `src/routes/DsparkTrainingCostCalculator.tsx` fallback error | Those inputs could not be costed. | The calculator cannot cost those inputs. |
+
+### The paragraph rule
+
+The DSpark VRAM step detail rendered 7 sentences in online mode, which is over
+the limit of 6. Two pairs of sentences were joined, so it now renders 5 in
+online mode and 4 offline.
 
 ## Term glossary as applied
 
@@ -94,7 +135,9 @@ not in the diff.
 Every number, unit, formula, config key name, and threshold keeps its original
 value. The only numeric differences in the diff are spelled-out numbers that
 became digits, which the rules ask for: `one` to `1`, `two` to `2`, `six` to `6`,
-`eight` to `8`, `ten` to `10`, and `twelve` to `12`.
+`eight` to `8`, `ten` to `10`, and `twelve` to `12`. One expression was removed,
+the plural branch of the GPU count sentence, and it was dead code: that sentence
+only renders when the run needs 2 GPUs or more.
 
 ## Commands
 

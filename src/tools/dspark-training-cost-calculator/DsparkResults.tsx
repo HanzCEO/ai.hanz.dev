@@ -65,7 +65,7 @@ export default function DsparkResults({
     return (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not read the target config</AlertTitle>
+        <AlertTitle>The calculator cannot read the target config</AlertTitle>
         <AlertDescription>
           <p>{shapeState.error}</p>
         </AlertDescription>
@@ -261,9 +261,9 @@ export default function DsparkResults({
                 {result.anchorsClamped && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
                     The run capped the anchor count at {formatExact(result.numAnchors)} for each
-                    sequence, which is 1 block for each sequence token. The requested count would
-                    score more positions than the sequence holds. Raise the sequence length or lower
-                    the anchor count to change this.
+                    sequence, which is 1 block for each sequence token. The sequence cannot hold the
+                    requested count. Raise the sequence length or lower the anchor count to change
+                    this.
                   </p>
                 )}
               </div>

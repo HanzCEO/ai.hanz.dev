@@ -71,7 +71,7 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
     return (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not read that config</AlertTitle>
+        <AlertTitle>The calculator cannot read that config</AlertTitle>
         <AlertDescription>
           <p>{shapeState.error}</p>
         </AlertDescription>

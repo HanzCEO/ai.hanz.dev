@@ -65,7 +65,7 @@ export default function ReapCostCalculator() {
       return {
         result: null,
         computeError:
-          error instanceof Error ? error.message : 'Those inputs could not be costed.',
+          error instanceof Error ? error.message : 'The calculator cannot cost those inputs.',
         invalidField: error instanceof ReapInputError ? error.field : null,
       }
     }
