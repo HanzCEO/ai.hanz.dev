@@ -179,6 +179,23 @@ describe('DsparkResults with a pasted target config', () => {
     expect(render(QWEN3_4B, { gpu, dataMode: 'online' })).toContain('Needs offline capture')
   })
 
+  it('does not report a target cache of 0 B when the run fits online', () => {
+    // A 32 GiB card holds the drafter and the resident target, so the online run
+    // fits and writes no cache. The fits sentence used to interpolate the zeroed
+    // cache size and read "the target cache still needs 0 B of storage".
+    const online = visibleText(render(QWEN3_4B, { dataMode: 'online' }))
+    expect(online).toContain('Fits')
+    expect(online).toContain('the target checkpoint is the only thing that needs storage')
+    expect(online).not.toContain('0 B')
+  })
+
+  it('reports the target cache size when the run fits offline', () => {
+    const offline = visibleText(render(QWEN3_4B, { dataMode: 'offline' }))
+    expect(offline).toContain('Fits')
+    expect(offline).toContain('The target cache still needs')
+    expect(offline).not.toContain('0 B')
+  })
+
   it('becomes bound by the cache read on a slow disk', () => {
     // A single card is fast enough that a network share is not the bottleneck,
     // but eight are, which is the case the bound warning exists for.

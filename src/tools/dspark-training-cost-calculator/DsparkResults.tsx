@@ -338,8 +338,9 @@ export default function DsparkResults({
                 )}
                 {result.verdict === 'fits' && (
                   <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                    This run fits. The target cache still needs {formatBytes(result.cacheBytes).text}{' '}
-                    of storage, and the target checkpoint needs its own space on top.
+                    {offline
+                      ? `This run fits. The target cache still needs ${formatBytes(result.cacheBytes).text} of storage, and the target checkpoint needs its own space on top.`
+                      : 'This run fits. The run writes no target cache, so the target checkpoint is the only thing that needs storage.'}
                   </p>
                 )}
               </div>
