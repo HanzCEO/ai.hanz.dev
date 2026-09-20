@@ -44,7 +44,7 @@ export const tools: Tool[] = [
     slug: 'inference-gpu-calculator',
     name: 'Inference GPU Calculator',
     description:
-      'Finds the smallest GPU configuration that serves a model in FP16 or BF16, from the resident weights, the KV cache, the activation buffer, and the framework reserve.',
+      'Sizes the KV cache for a model and then finds the smallest GPU configuration that serves it in FP16 or BF16, from the resident weights, the cache, an activation buffer, and a framework reserve.',
     icon: Cpu,
     status: 'ready',
   },

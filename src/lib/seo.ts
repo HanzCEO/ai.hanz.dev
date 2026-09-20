@@ -50,7 +50,7 @@ const DSPARK_DESCRIPTION =
 
 const INFERENCE_TITLE = 'Inference GPU Calculator | ai.hanz.dev'
 const INFERENCE_DESCRIPTION =
-  'Inference GPU calculator for FP16 and BF16. Find the resident weight size, the KV cache size, and the smallest GPU configuration that holds a model at your context length and sequence count.'
+  'Inference GPU calculator for FP16 and BF16. Size the KV cache first, then find the smallest GPU configuration that holds the model, with the decode rate it reaches.'
 
 export const ROUTE_META: RouteMeta[] = [
   {
@@ -63,7 +63,7 @@ export const ROUTE_META: RouteMeta[] = [
     path: KV_CACHE_PATH,
     title: 'KV Cache Calculator | ai.hanz.dev',
     description:
-      'Estimate KV cache size for any model on HuggingFace or ModelScope. Set context length, sequence count, and cache dtype.',
+      'Estimate KV cache size for any model. Read the config from HuggingFace or ModelScope, paste a config.json, or enter the values yourself.',
   },
   {
     path: REAP_PATH,
