@@ -93,7 +93,7 @@ export default function DsparkTrainingCostCalculator() {
 
       <ToolHeader
         title="DSpark Training Cost Calculator"
-        description="Estimate what it costs to train a DSpark speculative-decoding drafter against a custom target. The calculator answers 3 questions. It shows the size of the target cache, the duration of the run, and whether the run fits in VRAM. It reads the target shape from a HuggingFace or ModelScope config. You can also paste a config.json or enter the values yourself."
+        description="Estimate what it costs to train a DSpark speculative-decoding drafter against a custom target. It shows the size of the target cache. It also shows the duration of the run, and whether the run fits in VRAM. It reads the target shape from a HuggingFace or ModelScope config. You can also paste a config.json or enter the values yourself."
       />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">

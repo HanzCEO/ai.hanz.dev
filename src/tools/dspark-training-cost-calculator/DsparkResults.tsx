@@ -139,13 +139,13 @@ export default function DsparkResults({
 
           {/* A self contained answer, so it can be lifted on its own. */}
           <p className="text-sm">
-            Training a DSpark drafter against {targetLabel} with{' '}
-            {formatExact(shape.numLayers)} blocks and {formatExact(shape.hiddenSize)} hidden takes
-            about <strong>{formatDuration(result.estimateSeconds)}</strong> on {gpu.label}
+            Training a DSpark drafter against {targetLabel} takes about{' '}
+            <strong>{formatDuration(result.estimateSeconds)}</strong> on {gpu.label}. The target has{' '}
+            {formatExact(shape.numLayers)} blocks and {formatExact(shape.hiddenSize)} hidden.{' '}
             {Number(result.vramBytes) > 0 && result.verdict !== 'fits'
-              ? ` across ${result.gpusNeeded} GPU${result.gpusNeeded === 1 ? '' : 's'}`
+              ? `The run divides across ${result.gpusNeeded} GPUs. `
               : ''}
-            . The run is limited by {boundLabel}.
+            The run is limited by {boundLabel}.
           </p>
 
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
@@ -344,9 +344,9 @@ export default function DsparkResults({
                   target
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  The backbone holds {formatExact(result.draftBackboneParams)}. The projection from
-                  the captured target layers holds {formatExact(result.draftProjectionParams)}. The
-                  Markov head holds {formatExact(result.draftMarkovParams)}. The confidence head
+                  The backbone holds {formatExact(result.draftBackboneParams)}, and the projection
+                  from the captured target layers holds {formatExact(result.draftProjectionParams)}.
+                  The Markov head holds {formatExact(result.draftMarkovParams)}. The confidence head
                   holds {formatExact(result.draftConfidenceParams)}. The embedding and the language
                   model head are shared with the target and frozen. The run never trains them.
                 </p>

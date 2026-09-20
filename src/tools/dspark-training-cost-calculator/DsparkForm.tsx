@@ -360,7 +360,7 @@ export default function DsparkForm({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          The published recipe trains at a learning rate of {DEFAULT_LEARNING_RATE} with a{' '}
+          The published recipe trains at a learning rate of {DEFAULT_LEARNING_RATE}. It uses a{' '}
           {DEFAULT_WARMUP_RATIO * 100} percent warmup and an effective batch of{' '}
           {DEFAULT_GLOBAL_BATCH_SIZE}. Neither value changes the cost, so neither is an input here.
         </p>

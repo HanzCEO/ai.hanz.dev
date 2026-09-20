@@ -136,11 +136,11 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
 
           {/* A self contained answer, so it can be lifted on its own. */}
           <p className="text-sm">
-            REAP on {shape.modelType} with{' '}
-            {result.shape.numLayers.toLocaleString('en-US')} blocks and{' '}
-            {shape.routedExperts.toLocaleString('en-US')} experts in each block takes about{' '}
-            <strong>{formatDuration(result.estimateSeconds)}</strong> on a {gpu.label} at your
-            calibration recipe. {verdictSentence(result)} The run is limited by {boundLabel}.
+            REAP on {shape.modelType} takes about{' '}
+            <strong>{formatDuration(result.estimateSeconds)}</strong> on a {gpu.label}. The model
+            has {result.shape.numLayers.toLocaleString('en-US')} blocks, and each expert bank holds{' '}
+            {shape.routedExperts.toLocaleString('en-US')} experts. The run follows your calibration
+            recipe. {verdictSentence(result)} The run is limited by {boundLabel}.
           </p>
 
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
