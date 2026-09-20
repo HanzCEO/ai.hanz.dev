@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { defaultsFromSchema, serializeState } from '@/lib/url-state'
+import { defaultsFromSchema, parsePositiveInteger, serializeState } from '@/lib/url-state'
 
 import {
   CALCULATOR_SCHEMA,
   DEFAULT_CONTEXT_LENGTH,
   DEFAULT_MODEL_ID,
   DEFAULT_SEQUENCE_COUNT,
-  parsePositiveInteger,
 } from './useCalculatorState'
 
 /**

@@ -1,6 +1,6 @@
 import { WEIGHT_DTYPES, type WeightDtype } from '@/lib/reap'
 import type { GpuSpec } from '@/lib/hardware'
-import type { SupportLevel } from '@/lib/kvcache'
+import type { SupportLevel } from '@/lib/support'
 
 import SupportTag from '@/components/ui/support-tag'
 import {

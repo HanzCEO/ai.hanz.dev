@@ -1,8 +1,4 @@
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
-import { useState } from 'react'
-
 import { STORAGE_PRESETS, type GpuSpec } from '@/lib/hardware'
-import { PROVIDER_LIST, type Provider } from '@/lib/kvcache'
 import {
   CALIBRATION_PRESETS,
   PRUNE_RATIOS,
@@ -10,7 +6,8 @@ import {
   type ReapInputField,
   type WeightDtype,
 } from '@/lib/reap'
-import { Input } from '@/components/ui/input'
+import NumberField from '@/components/ui/number-field'
+import { PROVIDER_LIST } from '@/lib/kvcache'
 import {
   Select,
   SelectContent,
@@ -18,13 +15,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import GpuSelect from '@/components/hardware/GpuSelect'
+import {
+  ConfigPasteField,
+  ModelIdField,
+  ProviderPicker,
+  TokenField,
+} from '@/components/model-source/ModelSourceFields'
+import SegmentedControl from '@/components/ui/segmented'
 
-import GpuSelect from './GpuSelect'
 import WeightDtypeSelect from './WeightDtypeSelect'
 import type { ReapShapeState } from './useReapShape'
 import type { InputMode, ReapFormInputs } from './useReapState'
-
-const PROVIDER_ORDER: Provider[] = ['huggingface', 'modelscope']
 
 const MODE_LABELS: Array<{ id: InputMode; label: string; hint: string }> = [
   { id: 'hub', label: 'Model id', hint: 'Read the config from HuggingFace or ModelScope.' },
@@ -40,46 +42,6 @@ function activePresetId(samples: string, sequenceLength: string): string {
   return match?.id ?? 'custom'
 }
 
-function Field({
-  id,
-  label,
-  hint,
-  value,
-  onChange,
-  invalid,
-  min,
-  decimal,
-}: {
-  id: string
-  label: string
-  hint?: string
-  value: string
-  onChange: (value: string) => void
-  invalid?: boolean
-  min?: number
-  /** A fraction is allowed, which changes the step and the on-screen keyboard. */
-  decimal?: boolean
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      <Input
-        id={id}
-        type="number"
-        inputMode={decimal ? 'decimal' : 'numeric'}
-        step={decimal ? 'any' : 1}
-        min={min}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={invalid}
-      />
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  )
-}
-
 interface ReapFormProps {
   inputs: ReapFormInputs
   update: (patch: Partial<ReapFormInputs>) => void
@@ -90,160 +52,73 @@ interface ReapFormProps {
 }
 
 export default function ReapForm({ inputs, update, shapeState, gpu, invalidField }: ReapFormProps) {
-  const [showToken, setShowToken] = useState(false)
   const providerSpec = PROVIDER_LIST.find((spec) => spec.id === inputs.provider)
   const presetId = activePresetId(inputs.samples, inputs.sequenceLength)
   const preset = findCalibrationPreset(presetId)
 
   return (
     <form className="flex flex-col gap-6" onSubmit={(event) => event.preventDefault()}>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-medium">Model source</legend>
-        <div className="border-border inline-flex w-fit flex-wrap rounded-lg border p-0.5">
-          {MODE_LABELS.map((mode) => {
-            const active = inputs.mode === mode.id
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                aria-pressed={active}
-                onClick={() => update({ mode: mode.id })}
-                className={`rounded-md px-3 py-1 text-sm transition-colors ${
-                  active
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {mode.label}
-              </button>
-            )
-          })}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {MODE_LABELS.find((mode) => mode.id === inputs.mode)?.hint}
-        </p>
-      </fieldset>
+      <SegmentedControl
+        legend="Model source"
+        options={MODE_LABELS}
+        value={inputs.mode}
+        onValueChange={(mode) => update({ mode })}
+        wrap
+      />
 
       {inputs.mode === 'hub' && (
         <>
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-sm font-medium">Provider</legend>
-            <div className="border-border inline-flex w-fit rounded-lg border p-0.5">
-              {PROVIDER_ORDER.map((provider) => {
-                const spec = PROVIDER_LIST.find((entry) => entry.id === provider)
-                const active = inputs.provider === provider
-                return (
-                  <button
-                    key={provider}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => update({ provider })}
-                    className={`rounded-md px-3 py-1 text-sm transition-colors ${
-                      active
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {spec?.label ?? provider}
-                  </button>
-                )
-              })}
-            </div>
-          </fieldset>
+          <ProviderPicker
+            value={inputs.provider}
+            onValueChange={(provider) => update({ provider })}
+          />
 
-          <div className="flex flex-col gap-2">
-            <label htmlFor="reap-model-id" className="text-sm font-medium">
-              Model id
-            </label>
-            <Input
-              id="reap-model-id"
-              value={inputs.modelId}
-              onChange={(event) => update({ modelId: event.target.value })}
-              placeholder="owner/name"
-              spellCheck={false}
-              autoComplete="off"
-            />
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              {shapeState.status === 'loading' && (
-                <>
-                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                  Reading the config
-                </>
-              )}
-              {shapeState.status === 'idle' && 'Type a model id.'}
-              {shapeState.status === 'ready' && shapeState.shape && (
+          <ModelIdField
+            id="reap-model-id"
+            value={inputs.modelId}
+            onChange={(modelId) => update({ modelId })}
+            status={shapeState.status}
+            idleHint="Type a model id."
+            notMoeHint="That model has no expert bank."
+            summary={
+              shapeState.shape && (
                 <>
                   {shapeState.shape.modelType} · {shapeState.shape.numLayers} layers ·{' '}
                   {shapeState.shape.moeLayers} with experts
                 </>
-              )}
-              {shapeState.status === 'not-moe' && 'That model has no expert bank.'}
-              {shapeState.status === 'error' && 'Could not read that config.'}
-            </p>
-          </div>
+              )
+            }
+          />
 
-          <div className="flex flex-col gap-2">
-            <label htmlFor="reap-token" className="text-sm font-medium">
-              {providerSpec?.tokenLabel ?? 'token'}
-            </label>
-            <div className="relative">
-              <Input
-                id="reap-token"
-                type={showToken ? 'text' : 'password'}
-                value={inputs.token}
-                onChange={(event) => update({ token: event.target.value })}
-                placeholder="Optional"
-                spellCheck={false}
-                autoComplete="off"
-                className="pr-9"
-              />
-              <button
-                type="button"
-                onClick={() => setShowToken((current) => !current)}
-                aria-label={showToken ? 'Hide the token' : 'Show the token'}
-                className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-9 items-center justify-center"
-              >
-                {showToken ? (
-                  <EyeOff className="size-4" aria-hidden="true" />
-                ) : (
-                  <Eye className="size-4" aria-hidden="true" />
-                )}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">{providerSpec?.tokenHint}</p>
-          </div>
+          <TokenField
+            id="reap-token"
+            label={providerSpec?.tokenLabel ?? 'token'}
+            value={inputs.token}
+            onChange={(token) => update({ token })}
+            hint={providerSpec?.tokenHint}
+          />
         </>
       )}
 
       {inputs.mode === 'paste' && (
-        <div className="flex flex-col gap-2">
-          <label htmlFor="reap-config-text" className="text-sm font-medium">
-            config.json
-          </label>
-          <textarea
-            id="reap-config-text"
-            value={inputs.configText}
-            onChange={(event) => update({ configText: event.target.value })}
-            spellCheck={false}
-            placeholder='{ "model_type": "qwen3_moe", "num_hidden_layers": 48, ... }'
-            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 min-h-40 w-full rounded-lg border bg-transparent px-2.5 py-2 font-mono text-xs outline-none focus-visible:ring-3"
-          />
-          <p className="text-xs text-muted-foreground">
-            Nothing is uploaded. The config is read in the browser.
-          </p>
-        </div>
+        <ConfigPasteField
+          id="reap-config-text"
+          value={inputs.configText}
+          onChange={(configText) => update({ configText })}
+          placeholder='{ "model_type": "qwen3_moe", "num_hidden_layers": 48, ... }'
+        />
       )}
 
       {inputs.mode === 'manual' && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
+          <NumberField
             id="reap-hidden"
             label="hidden_size"
             min={1}
             value={inputs.hiddenSize}
             onChange={(hiddenSize) => update({ hiddenSize })}
           />
-          <Field
+          <NumberField
             id="reap-moe-ffn"
             label="moe_intermediate_size"
             hint="Width of one expert."
@@ -251,14 +126,14 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             value={inputs.moeIntermediateSize}
             onChange={(moeIntermediateSize) => update({ moeIntermediateSize })}
           />
-          <Field
+          <NumberField
             id="reap-experts"
             label="routed experts"
             min={1}
             value={inputs.routedExperts}
             onChange={(routedExperts) => update({ routedExperts })}
           />
-          <Field
+          <NumberField
             id="reap-topk"
             label="experts per token"
             hint="The router top-k."
@@ -266,14 +141,14 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             value={inputs.expertsPerToken}
             onChange={(expertsPerToken) => update({ expertsPerToken })}
           />
-          <Field
+          <NumberField
             id="reap-layers"
             label="num_hidden_layers"
             min={1}
             value={inputs.numLayers}
             onChange={(numLayers) => update({ numLayers })}
           />
-          <Field
+          <NumberField
             id="reap-moe-layers"
             label="layers with experts"
             hint="The rest are dense MLPs."
@@ -281,7 +156,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             value={inputs.moeLayers}
             onChange={(moeLayers) => update({ moeLayers })}
           />
-          <Field
+          <NumberField
             id="reap-shared"
             label="shared experts"
             hint="Always-on experts. Zero for most models."
@@ -289,7 +164,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             value={inputs.sharedExperts}
             onChange={(sharedExperts) => update({ sharedExperts })}
           />
-          <Field
+          <NumberField
             id="reap-ffn"
             label="intermediate_size"
             hint="Dense MLP width, used by non-expert layers."
@@ -297,28 +172,28 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             value={inputs.intermediateSize}
             onChange={(intermediateSize) => update({ intermediateSize })}
           />
-          <Field
+          <NumberField
             id="reap-vocab"
             label="vocab_size"
             min={1}
             value={inputs.vocabSize}
             onChange={(vocabSize) => update({ vocabSize })}
           />
-          <Field
+          <NumberField
             id="reap-heads"
             label="attention heads"
             min={1}
             value={inputs.attentionHeads}
             onChange={(attentionHeads) => update({ attentionHeads })}
           />
-          <Field
+          <NumberField
             id="reap-head-dim"
             label="head_dim"
             min={1}
             value={inputs.headDim}
             onChange={(headDim) => update({ headDim })}
           />
-          <Field
+          <NumberField
             id="reap-kv-heads"
             label="key and value heads"
             min={1}
@@ -375,7 +250,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
+          <NumberField
             id="reap-samples"
             label="Samples"
             min={1}
@@ -383,7 +258,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             onChange={(samples) => update({ samples })}
             invalid={invalidField === 'samples'}
           />
-          <Field
+          <NumberField
             id="reap-seq"
             label="Tokens per sample"
             min={1}
@@ -475,7 +350,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
         <legend className="text-sm font-medium">Assumptions</legend>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
+          <NumberField
             id="reap-mfu"
             label="GPU utilisation"
             hint="A share of dense peak, between 0 and 1. A third is realistic."
@@ -484,7 +359,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             onChange={(mfu) => update({ mfu })}
             invalid={invalidField === 'mfu'}
           />
-          <Field
+          <NumberField
             id="reap-overhead"
             label="Overhead factor"
             hint="Framework, observer, and dataloader cost over the raw figure."
@@ -494,7 +369,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             onChange={(overheadFactor) => update({ overheadFactor })}
             invalid={invalidField === 'overheadFactor'}
           />
-          <Field
+          <NumberField
             id="reap-micro-batch"
             label="Micro batch"
             hint="Samples in flight at once. Drives the activation buffer."

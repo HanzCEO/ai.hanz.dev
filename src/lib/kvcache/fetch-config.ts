@@ -34,6 +34,12 @@ export const PROVIDERS: Record<Provider, ProviderSpec> = {
 
 export const PROVIDER_LIST: ProviderSpec[] = [PROVIDERS.huggingface, PROVIDERS.modelscope]
 
+/**
+ * The order the provider pickers present. Declared once so the two forms cannot
+ * drift into showing the same providers in different orders.
+ */
+export const PROVIDER_ORDER: Provider[] = ['huggingface', 'modelscope']
+
 /** Accepts a bare repo id or a pasted URL and returns the bare repo id. */
 export function normalizeRepoId(input: string): string {
   let value = input.trim()

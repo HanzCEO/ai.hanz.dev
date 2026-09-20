@@ -12,4 +12,8 @@
     <loc>https://ai.hanz.dev/tools/cost-to-reap-calculator/</loc>
     <changefreq>monthly</changefreq>
   </url>
+  <url>
+    <loc>https://ai.hanz.dev/tools/dspark-training-cost-calculator/</loc>
+    <changefreq>monthly</changefreq>
+  </url>
 </urlset>

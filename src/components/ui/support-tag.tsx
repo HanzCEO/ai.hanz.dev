@@ -1,4 +1,4 @@
-import type { SupportLevel } from '@/lib/kvcache'
+import type { SupportLevel } from '@/lib/support'
 
 const LEVEL_STYLES: Record<SupportLevel, string> = {
   supported: 'text-emerald-600 dark:text-emerald-400',

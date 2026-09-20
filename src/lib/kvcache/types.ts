@@ -10,7 +10,14 @@ export type DtypeId =
   | 'INT4'
   | 'FP4'
 
-export type SupportLevel = 'supported' | 'untested' | 'unsupported'
+/**
+ * The support vocabulary is shared by every picker in the site, so it lives in
+ * src/lib/support.ts. It is imported for local use and re-exported because the
+ * dtype tables and the cache engine are its heaviest consumers.
+ */
+import type { SupportLevel } from '../support'
+
+export type { SupportLevel }
 
 export type ArchitectureFamily = 'gqa' | 'mla' | 'hybrid_linear' | 'dsv4' | 'dsv41' | 'unknown'
 

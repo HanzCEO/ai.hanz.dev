@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  booleanFlag,
+  decimalOrNull,
   defaultsFromSchema,
-  digitsOnly,
+  digitsOrNull,
+  enumOf,
   nonEmptyText,
+  parsePositiveInteger,
   pickEnum,
   serializeState,
   type UrlSchema,
@@ -20,17 +24,73 @@ describe('pickEnum', () => {
   })
 })
 
-describe('digitsOnly', () => {
+describe('enumOf', () => {
+  const parse = enumOf(['huggingface', 'modelscope'] as const)
+
+  it('returns the value when it is allowed', () => {
+    expect(parse('modelscope')).toBe('modelscope')
+  })
+
+  it('returns null for a value outside the list or an absent parameter', () => {
+    expect(parse('github')).toBeNull()
+    expect(parse(null)).toBeNull()
+    expect(parse('')).toBeNull()
+  })
+})
+
+describe('digitsOrNull', () => {
   it('returns a run of digits, trimmed', () => {
-    expect(digitsOnly(' 32768 ')).toBe('32768')
-    expect(digitsOnly('0')).toBe('0')
+    expect(digitsOrNull(' 32768 ')).toBe('32768')
+    expect(digitsOrNull('0')).toBe('0')
   })
 
   it('returns null for anything else, including an empty field', () => {
-    expect(digitsOnly('')).toBeNull()
-    expect(digitsOnly('12a')).toBeNull()
-    expect(digitsOnly('-1')).toBeNull()
-    expect(digitsOnly(null)).toBeNull()
+    expect(digitsOrNull('')).toBeNull()
+    expect(digitsOrNull('12a')).toBeNull()
+    expect(digitsOrNull('-1')).toBeNull()
+    expect(digitsOrNull(null)).toBeNull()
+  })
+})
+
+describe('decimalOrNull', () => {
+  it('returns a decimal, trimmed', () => {
+    expect(decimalOrNull(' 0.4 ')).toBe('0.4')
+    expect(decimalOrNull('2')).toBe('2')
+  })
+
+  it('returns null for a sign, a malformed number, or an absent parameter', () => {
+    expect(decimalOrNull('-0.4')).toBeNull()
+    expect(decimalOrNull('.5')).toBeNull()
+    expect(decimalOrNull('1.2.3')).toBeNull()
+    expect(decimalOrNull(null)).toBeNull()
+  })
+})
+
+describe('booleanFlag', () => {
+  it('reads one and zero as booleans', () => {
+    expect(booleanFlag('1')).toBe(true)
+    expect(booleanFlag('0')).toBe(false)
+  })
+
+  it('returns null for anything else', () => {
+    expect(booleanFlag('true')).toBeNull()
+    expect(booleanFlag('')).toBeNull()
+    expect(booleanFlag(null)).toBeNull()
+  })
+})
+
+describe('parsePositiveInteger', () => {
+  it('reads a whole number of one or more', () => {
+    expect(parsePositiveInteger('1')).toBe(1)
+    expect(parsePositiveInteger(' 32768 ')).toBe(32768)
+  })
+
+  it('returns null for zero, a sign, a fraction or text', () => {
+    expect(parsePositiveInteger('0')).toBeNull()
+    expect(parsePositiveInteger('-5')).toBeNull()
+    expect(parsePositiveInteger('1.5')).toBeNull()
+    expect(parsePositiveInteger('many')).toBeNull()
+    expect(parsePositiveInteger('')).toBeNull()
   })
 })
 
@@ -53,13 +113,9 @@ interface Sample {
 }
 
 const SCHEMA: UrlSchema<Sample> = {
-  provider: { param: 'provider', default: 'huggingface', parse: pickEnumOf(['huggingface', 'modelscope']) },
-  context: { param: 'context', default: '32768', parse: digitsOnly },
+  provider: { param: 'provider', default: 'huggingface', parse: enumOf(['huggingface', 'modelscope']) },
+  context: { param: 'context', default: '32768', parse: digitsOrNull },
   secret: { param: 'secret', default: '', parse: () => null, omit: true },
-}
-
-function pickEnumOf(allowed: readonly string[]) {
-  return (raw: string | null) => pickEnum(raw, allowed)
 }
 
 describe('defaultsFromSchema', () => {

@@ -1,14 +1,10 @@
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
-import { useState } from 'react'
-
-import { PROVIDER_LIST, type ComputeResult, type Provider } from '@/lib/kvcache'
+import { ModelIdField, ProviderPicker, TokenField } from '@/components/model-source/ModelSourceFields'
 import { Input } from '@/components/ui/input'
+import { PROVIDER_LIST, type ComputeResult } from '@/lib/kvcache'
 import DtypeSelect from '@/tools/kv-cache-calculator/DtypeSelect'
 import { MODEL_PRESETS } from '@/tools/kv-cache-calculator/presets'
 import type { ModelConfigState } from '@/lib/use-model-config'
 import type { CalculatorInputs } from '@/tools/kv-cache-calculator/useCalculatorState'
-
-const PROVIDER_ORDER: Provider[] = ['huggingface', 'modelscope']
 
 interface CalculatorFormProps {
   inputs: CalculatorInputs
@@ -29,76 +25,33 @@ export default function CalculatorForm({
   sequenceError,
   onUseMaxContext,
 }: CalculatorFormProps) {
-  const [showToken, setShowToken] = useState(false)
-
   const providerSpec = PROVIDER_LIST.find((spec) => spec.id === inputs.provider)
   const detected = configState.status === 'ready' ? result : null
   const showIndexer = detected?.indexerDtypeSupport != null
 
   return (
     <form className="flex flex-col gap-6" onSubmit={(event) => event.preventDefault()}>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-medium">Provider</legend>
-        <div className="border-border inline-flex w-fit rounded-lg border p-0.5">
-          {PROVIDER_ORDER.map((provider) => {
-            const spec = PROVIDER_LIST.find((entry) => entry.id === provider)
-            const active = inputs.provider === provider
-            return (
-              <button
-                key={provider}
-                type="button"
-                aria-pressed={active}
-                onClick={() => update({ provider })}
-                className={`rounded-md px-3 py-1 text-sm transition-colors ${
-                  active
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {spec?.label ?? provider}
-              </button>
-            )
-          })}
-        </div>
-      </fieldset>
+      <ProviderPicker
+        value={inputs.provider}
+        onValueChange={(provider) => update({ provider })}
+      />
 
-      <div className="flex flex-col gap-2">
-        <label htmlFor="model-id" className="text-sm font-medium">
-          Model id
-        </label>
-        <Input
-          id="model-id"
-          list="model-presets"
-          value={inputs.modelId}
-          onChange={(event) => update({ modelId: event.target.value })}
-          placeholder="owner/name"
-          spellCheck={false}
-          autoComplete="off"
-        />
-        <datalist id="model-presets">
-          {MODEL_PRESETS.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.note}
-            </option>
-          ))}
-        </datalist>
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          {configState.status === 'loading' && (
-            <>
-              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-              Reading the config
-            </>
-          )}
-          {configState.status === 'idle' && 'Type a model id, or pick a suggestion.'}
-          {configState.status === 'ready' && detected && (
+      <ModelIdField
+        id="model-id"
+        listId="model-presets"
+        value={inputs.modelId}
+        onChange={(modelId) => update({ modelId })}
+        status={configState.status}
+        presets={MODEL_PRESETS}
+        summary={
+          detected && (
             <>
               {detected.architecture.label} · {detected.layerSplit.total} layers ·{' '}
               {detected.architecture.modelType}
             </>
-          )}
-          {configState.status === 'error' && 'Could not read that config.'}
-        </p>
-      </div>
+          )
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
@@ -176,36 +129,13 @@ export default function CalculatorForm({
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        <label htmlFor="provider-token" className="text-sm font-medium">
-          {providerSpec?.tokenLabel ?? 'token'}
-        </label>
-        <div className="relative">
-          <Input
-            id="provider-token"
-            type={showToken ? 'text' : 'password'}
-            value={inputs.token}
-            onChange={(event) => update({ token: event.target.value })}
-            placeholder="Optional"
-            spellCheck={false}
-            autoComplete="off"
-            className="pr-9"
-          />
-          <button
-            type="button"
-            onClick={() => setShowToken((current) => !current)}
-            aria-label={showToken ? 'Hide the token' : 'Show the token'}
-            className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-9 items-center justify-center"
-          >
-            {showToken ? (
-              <EyeOff className="size-4" aria-hidden="true" />
-            ) : (
-              <Eye className="size-4" aria-hidden="true" />
-            )}
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground">{providerSpec?.tokenHint}</p>
-      </div>
+      <TokenField
+        id="provider-token"
+        label={providerSpec?.tokenLabel ?? 'token'}
+        value={inputs.token}
+        onChange={(token) => update({ token })}
+        hint={providerSpec?.tokenHint}
+      />
     </form>
   )
 }

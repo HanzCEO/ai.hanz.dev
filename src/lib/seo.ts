@@ -1,4 +1,6 @@
 import { REAP_FAQ } from './reap/faq'
+import { DSPARK_FAQ } from './dspark/faq'
+import type { FaqItem } from './faq'
 
 /**
  * Route metadata is the single source of truth for page titles, descriptions,
@@ -34,10 +36,15 @@ export interface RouteMeta {
  */
 export const KV_CACHE_PATH = '/tools/kv-cache-calculator/'
 export const REAP_PATH = '/tools/cost-to-reap-calculator/'
+export const DSPARK_PATH = '/tools/dspark-training-cost-calculator/'
 
 const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
 const REAP_DESCRIPTION =
   'REAP duration calculator for mixture of experts models. Estimate how long REAP expert pruning takes, check whether one expert block fits your GPU, and see how much smaller the pruned model gets.'
+
+const DSPARK_TITLE = 'DSpark Training Cost Calculator | ai.hanz.dev'
+const DSPARK_DESCRIPTION =
+  'DSpark training cost calculator. Estimate the target hidden state cache size, the training duration, and the VRAM a speculative-decoding drafter needs for any target model.'
 
 export const ROUTE_META: RouteMeta[] = [
   {
@@ -65,6 +72,19 @@ export const ROUTE_META: RouteMeta[] = [
         description: REAP_DESCRIPTION,
       }),
       faqJsonLd(REAP_FAQ),
+    ),
+  },
+  {
+    path: DSPARK_PATH,
+    title: DSPARK_TITLE,
+    description: DSPARK_DESCRIPTION,
+    jsonLd: jsonLdGraph(
+      softwareApplicationJsonLd({
+        path: DSPARK_PATH,
+        title: DSPARK_TITLE,
+        description: DSPARK_DESCRIPTION,
+      }),
+      faqJsonLd(DSPARK_FAQ),
     ),
   },
 ]
@@ -248,10 +268,7 @@ export function applyHead(meta: RouteMeta): void {
 // Structured data
 // ---------------------------------------------------------------------------
 
-export interface FaqItem {
-  question: string
-  answer: string
-}
+export type { FaqItem } from './faq'
 
 /**
  * A FAQPage node. Search engines read these question and answer pairs directly,

@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { GPU_PRESETS, STORAGE_PRESETS } from '@/lib/hardware'
 import type { Provider } from '@/lib/kvcache'
 import type { WeightDtype } from '@/lib/reap'
-import { useUrlSyncedState, type UrlSchema } from '@/lib/url-state'
+import { useUrlSyncedState, booleanFlag, decimalOrNull, digitsOrNull, enumOf, type UrlSchema } from '@/lib/url-state'
 
 /** Where the model shape comes from. */
 export type InputMode = 'hub' | 'paste' | 'manual'
@@ -100,22 +100,6 @@ const STORAGE_IDS = STORAGE_PRESETS.map((storage) => storage.id)
 const WEIGHT_DTYPES: WeightDtype[] = ['BF16', 'FP8', 'INT4']
 const MODES: InputMode[] = ['hub', 'paste', 'manual']
 
-function enumOf<T extends string>(allowed: readonly T[]) {
-  return (raw: string | null): T | null =>
-    raw !== null && (allowed as readonly string[]).includes(raw) ? (raw as T) : null
-}
-
-function digitsOrNull(raw: string | null): string | null {
-  if (raw === null) return null
-  const trimmed = raw.trim()
-  return /^\d+$/.test(trimmed) ? trimmed : null
-}
-
-function decimalOrNull(raw: string | null): string | null {
-  if (raw === null) return null
-  const trimmed = raw.trim()
-  return /^\d+(\.\d+)?$/.test(trimmed) ? trimmed : null
-}
 
 const REAP_SCHEMA: UrlSchema<ReapFormInputs> = {
   mode: { param: 'mode', default: DEFAULTS.mode, parse: enumOf(MODES) },
@@ -172,7 +156,7 @@ const REAP_SCHEMA: UrlSchema<ReapFormInputs> = {
   scaleTopK: {
     param: 'scale_topk',
     default: DEFAULTS.scaleTopK,
-    parse: (raw) => (raw === '1' ? true : raw === '0' ? false : null),
+    parse: booleanFlag,
     serialize: (value) => (value ? '1' : '0'),
   },
 }

@@ -1,46 +1,26 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { findGpu, findStorage } from '@/lib/hardware'
+import { findGpu } from '@/lib/hardware'
 import type { GpuSpec } from '@/lib/hardware'
 import { parseConfigText } from '@/lib/model-config'
 import { detectMoeShape, estimateReap, type ReapInputs, type ReapResult } from '@/lib/reap'
+import { readConfigFixtureText } from '@/test/fixtures'
+import { reapInputs } from '@/test/reap'
 
 import ReapResults from './ReapResults'
 import type { ReapShapeState } from './useReapShape'
 
-const GLM_53 = path.join(
-  __dirname,
-  '..',
-  '..',
-  'lib',
-  'kvcache',
-  '__fixtures__',
-  'configs',
-  'glm-5-3.json',
-)
-
 const RTX_5090 = findGpu('rtx-5090') as GpuSpec
 
+/**
+ * The panel tests open on a consumer card in FP8, which is the case where the
+ * feasibility verdict has something to say. The engine defaults are used for
+ * everything else, so the two suites cost out the same run.
+ */
 function inputs(overrides: Partial<ReapInputs> = {}): ReapInputs {
-  return {
-    calibrationSamples: 512,
-    sequenceLength: 2048,
-    pruneRatio: 0.4,
-    gpu: RTX_5090,
-    storage: findStorage('nvme-pcie4')!,
-    weightDtype: 'FP8',
-    mfu: 0.3,
-    overheadFactor: 2,
-    setupSeconds: 600,
-    microBatchSize: 1,
-    scaleTopK: false,
-    ...overrides,
-  }
+  return reapInputs({ gpu: RTX_5090, weightDtype: 'FP8', ...overrides })
 }
 
 /**
@@ -70,7 +50,7 @@ function render(configText: string, overrides: Partial<ReapInputs> = {}): string
   )
 }
 
-const glm53Text = readFileSync(GLM_53, 'utf8')
+const glm53Text = readConfigFixtureText('glm-5-3')
 
 describe('ReapResults with a pasted GLM-5.3 config', () => {
   it('renders a time estimate', () => {

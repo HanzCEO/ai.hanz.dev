@@ -1,14 +1,13 @@
 import { AlertTriangle, Clock, HardDrive, Loader2, Scissors } from 'lucide-react'
 
 import type { GpuSpec } from '@/lib/hardware'
-import { formatBytes, formatExact } from '@/lib/kvcache'
+import { formatBytes, formatDuration, formatExact } from '@/lib/format'
 import type { ReapResult, ReapVerdict } from '@/lib/reap'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 
 import ReapBreakdown from './ReapBreakdown'
-import { formatDuration } from './format'
 import type { ReapShapeState } from './useReapShape'
 
 const VERDICT_LABEL: Record<ReapVerdict, string> = {

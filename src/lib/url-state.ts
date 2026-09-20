@@ -28,6 +28,16 @@ export interface UrlFieldSpec<T> {
 /** A schema covering every key of the value shape. */
 export type UrlSchema<T> = { [K in keyof T]: UrlFieldSpec<T[K]> }
 
+/**
+ * Value parsers for query string fields, and the helpers a form uses to read a
+ * text input back into a number.
+ *
+ * Every tool declares its fields with these, so a parameter is read the same way
+ * whichever page owns it. A parser returns null when the parameter is absent or
+ * unusable, which the hook treats as "the URL supplied nothing here" and leaves
+ * the field at its default.
+ */
+
 /** Returns the raw parameter when it is one of the allowed values. */
 export function pickEnum(value: string | null, allowed: readonly string[]): string | null {
   if (value === null) return null
@@ -35,13 +45,49 @@ export function pickEnum(value: string | null, allowed: readonly string[]): stri
 }
 
 /**
+ * Builds a parser for a fixed set of allowed values, for use as a UrlFieldSpec
+ * parse function. Equivalent to pickEnum with the allowed list already bound.
+ */
+export function enumOf<T extends string>(allowed: readonly T[]) {
+  return (raw: string | null): T | null =>
+    raw !== null && (allowed as readonly string[]).includes(raw) ? (raw as T) : null
+}
+
+/**
+ * The same rule as enumOf, expressed as a type predicate.
+ *
+ * A field sometimes needs to narrow the raw parameter rather than just parse
+ * it, for example to build a schema entry whose value type is a narrower union.
+ * A predicate cannot be used as a plain parser, so the two forms are kept
+ * side by side and share one definition of the rule.
+ */
+export function enumGuard<T extends string>(allowed: readonly T[]) {
+  const parse = enumOf(allowed)
+  return (raw: string | null): raw is T => parse(raw) !== null
+}
+
+/**
  * Returns the parameter when it is a run of digits, so a field can be emptied
  * while typing without the empty string being treated as a value.
  */
-export function digitsOnly(value: string | null): string | null {
+export function digitsOrNull(value: string | null): string | null {
   if (value === null) return null
   const trimmed = value.trim()
   return /^\d+$/.test(trimmed) ? trimmed : null
+}
+
+/** Returns the parameter when it is a non-negative decimal number, or null. */
+export function decimalOrNull(value: string | null): string | null {
+  if (value === null) return null
+  const trimmed = value.trim()
+  return /^\d+(\.\d+)?$/.test(trimmed) ? trimmed : null
+}
+
+/** Returns '1' and '0' as booleans, for a flag held as text in the query string. */
+export function booleanFlag(value: string | null): boolean | null {
+  if (value === '1') return true
+  if (value === '0') return false
+  return null
 }
 
 /** Reads a non-empty trimmed string, or null. */
@@ -49,6 +95,19 @@ export function nonEmptyText(value: string | null): string | null {
   if (value === null) return null
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
+}
+
+/**
+ * Reads a text field as a whole number of one or more, or null when it is not
+ * one. Used by a form to validate what the user typed, as opposed to what the
+ * URL carried.
+ */
+export function parsePositiveInteger(value: string): number | null {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const parsed = Number(trimmed)
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return null
+  return parsed
 }
 
 /** The value each field takes when the URL supplies nothing. */

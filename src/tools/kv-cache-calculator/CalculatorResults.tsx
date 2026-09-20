@@ -1,10 +1,9 @@
 import { AlertTriangle, Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
+import { formatBytes, formatExact } from '@/lib/format'
 import {
   PROVIDER_LIST,
-  formatBytes,
-  formatExact,
   type ComputeResult,
   type ModelConfigError,
   type Provider,

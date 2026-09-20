@@ -1,4 +1,4 @@
-import { Calculator, Scissors, type LucideIcon } from 'lucide-react'
+import { Calculator, Scissors, Sparkles, type LucideIcon } from 'lucide-react'
 
 export type ToolStatus = 'ready' | 'planned'
 
@@ -30,6 +30,14 @@ export const tools: Tool[] = [
     description:
       'Estimates how long REAP expert pruning takes for a mixture of experts model, whether one expert block fits your GPU, and how much smaller the pruned model gets.',
     icon: Scissors,
+    status: 'ready',
+  },
+  {
+    slug: 'dspark-training-cost-calculator',
+    name: 'DSpark Training Cost Calculator',
+    description:
+      'Estimates the cost of training a DSpark speculative-decoding drafter against a custom target model: the size of the target hidden state cache, the length of the run, and whether it fits in VRAM.',
+    icon: Sparkles,
     status: 'ready',
   },
 ]

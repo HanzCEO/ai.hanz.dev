@@ -1,16 +1,12 @@
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-
 import { describe, expect, it } from 'vitest'
+
+import { loadConfigFixture } from '@/test/fixtures'
 
 import { computeKvCache, detectArchitecture, unwrapConfig } from './compute'
 import { DTYPES, dtypeBytes, dtypeSupport, supportFor } from './dtypes'
 import { KvCacheInputError, type ComputeResult, type RawConfig } from './types'
 
-function fixture(name: string): RawConfig {
-  const path = fileURLToPath(new URL(`./__fixtures__/configs/${name}.json`, import.meta.url))
-  return JSON.parse(readFileSync(path, 'utf8')) as RawConfig
-}
+const fixture = loadConfigFixture
 
 function total(name: string, options: Parameters<typeof computeKvCache>[1]): number {
   return computeKvCache(fixture(name), options).totalBytes

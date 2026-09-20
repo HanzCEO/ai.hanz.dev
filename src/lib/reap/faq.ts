@@ -1,4 +1,4 @@
-import type { FaqItem } from '../seo'
+import type { FaqItem } from '../faq'
 
 /**
  * The questions the page answers in prose, and the same questions it declares

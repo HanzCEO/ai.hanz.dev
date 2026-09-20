@@ -1,4 +1,3 @@
-export { attentionParamsPerLayer } from './attention'
 export { estimateReap } from './compute'
 export { REAP_FAQ } from './faq'
 export { detectMoeShape } from './moe-shape'

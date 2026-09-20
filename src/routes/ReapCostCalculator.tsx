@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { Link } from 'react-router'
 
+import FaqSection from '@/components/faq/FaqSection'
+import { ToolBreadcrumb, ToolHeader } from '@/components/layout/ToolPage'
 import {
   DEFAULT_GPU_ID,
   DEFAULT_STORAGE_ID,
@@ -84,23 +85,12 @@ export default function ReapCostCalculator() {
 
   return (
     <div className="flex flex-col gap-10">
-      <nav className="text-muted-foreground text-xs">
-        <Link to="/" className="underline-offset-4 hover:underline">
-          Tools
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <span>REAP Cost Calculator</span>
-      </nav>
+      <ToolBreadcrumb name="REAP Cost Calculator" />
 
-      <header className="flex max-w-3xl flex-col gap-3">
-        <h1 className="text-2xl font-medium tracking-tight">REAP Cost Calculator</h1>
-        <p className="text-muted-foreground">
-          This REAP duration calculator estimates how long a Router-weighted Expert Activation
-          Pruning run takes on your hardware, whether one expert block fits in your VRAM, and how
-          much smaller the pruned model gets. The shape is read from a HuggingFace or ModelScope
-          config, a config.json you paste, or numbers you type.
-        </p>
-      </header>
+      <ToolHeader
+        title="REAP Cost Calculator"
+        description="This REAP duration calculator estimates how long a Router-weighted Expert Activation Pruning run takes on your hardware, whether one expert block fits in your VRAM, and how much smaller the pruned model gets. The shape is read from a HuggingFace or ModelScope config, a config.json you paste, or numbers you type."
+      />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
         <ReapForm
@@ -118,19 +108,7 @@ export default function ReapCostCalculator() {
         />
       </div>
 
-      <section aria-labelledby="reap-faq-heading" className="flex max-w-3xl flex-col gap-5">
-        <h2 id="reap-faq-heading" className="text-lg font-medium tracking-tight">
-          Questions about REAP
-        </h2>
-        <div className="flex flex-col gap-5">
-          {REAP_FAQ.map((item) => (
-            <div key={item.question}>
-              <h3 className="text-sm font-medium">{item.question}</h3>
-              <p className="text-muted-foreground mt-1 text-sm">{item.answer}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <FaqSection id="reap-faq-heading" heading="Questions about REAP" items={REAP_FAQ} />
     </div>
   )
 }

@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { Link } from 'react-router'
 
+import { ToolBreadcrumb, ToolHeader } from '@/components/layout/ToolPage'
 import { computeKvCache, detectArchitecture, unwrapConfig, type ComputeResult, type Provider } from '@/lib/kvcache'
+import { parsePositiveInteger } from '@/lib/url-state'
 import CalculatorForm from '@/tools/kv-cache-calculator/CalculatorForm'
 import CalculatorResults from '@/tools/kv-cache-calculator/CalculatorResults'
 import { defaultDtypesForFamily } from '@/tools/kv-cache-calculator/defaultDtypes'
-import {
-  parsePositiveInteger,
-  useCalculatorState,
-} from '@/tools/kv-cache-calculator/useCalculatorState'
+import { useCalculatorState } from '@/tools/kv-cache-calculator/useCalculatorState'
 import { useModelConfig } from '@/lib/use-model-config'
 
 export default function KvCacheCalculator() {
@@ -101,21 +99,13 @@ export default function KvCacheCalculator() {
 
   return (
     <div className="flex flex-col gap-8">
-      <nav className="text-muted-foreground text-xs">
-        <Link to="/" className="underline-offset-4 hover:underline">
-          Tools
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <span>KV Cache Calculator</span>
-      </nav>
+      <ToolBreadcrumb name="KV Cache Calculator" />
 
-      <header className="flex max-w-2xl flex-col gap-3">
-        <h1 className="text-2xl font-medium tracking-tight">KV Cache Calculator</h1>
-        <p className="text-muted-foreground">
-          Size the cache for a model, a context length, and a sequence count. The config is read
-          from HuggingFace or ModelScope.
-        </p>
-      </header>
+      <ToolHeader
+        title="KV Cache Calculator"
+        description="Size the cache for a model, a context length, and a sequence count. The config is read from HuggingFace or ModelScope."
+        widthClass="max-w-2xl"
+      />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12">
         <CalculatorForm

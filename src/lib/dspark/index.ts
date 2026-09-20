@@ -1,0 +1,43 @@
+export { estimateDspark } from './compute'
+export { DSPARK_FAQ } from './faq'
+export {
+  ACTIVATION_BYTES_PER_ELEMENT,
+  ACTIVATION_FACTOR,
+  BF16_BYTES,
+  DEFAULT_BLOCK_SIZE,
+  DEFAULT_DRAFT_LAYERS,
+  DEFAULT_GPU_COUNT,
+  DEFAULT_GLOBAL_BATCH_SIZE,
+  DEFAULT_LEARNING_RATE,
+  DEFAULT_MARKOV_RANK,
+  DEFAULT_MFU,
+  DEFAULT_MICRO_BATCH,
+  DEFAULT_NUM_ANCHORS,
+  DEFAULT_OVERHEAD_FACTOR,
+  DEFAULT_PRESET,
+  DEFAULT_SEQUENCE_LENGTH,
+  DEFAULT_SETUP_SECONDS,
+  DEFAULT_TARGET_LAYERS,
+  DEFAULT_WARMUP_RATIO,
+  DSPARK_PRESETS,
+  GRADIENT_BYTES_PER_PARAM,
+  INT32_BYTES,
+  MAX_SUGGESTED_GPUS,
+  OPTIMIZER_BYTES_PER_PARAM,
+  RUNTIME_OVERHEAD_BYTES,
+  UINT8_BYTES,
+  findDsparkPreset,
+  presetTrainingTokens,
+  type DsparkPreset,
+} from './presets'
+export { detectDsparkShape } from './shape'
+export {
+  DsparkInputError,
+  type DsparkBound,
+  type DsparkDataMode,
+  type DsparkInputField,
+  type DsparkInputs,
+  type DsparkResult,
+  type DsparkTargetShape,
+  type DsparkVerdict,
+} from './types'

@@ -1,50 +1,22 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-
 import { describe, expect, it } from 'vitest'
 
 import { findGpu, findStorage } from '../hardware'
 import type { GpuSpec, StorageSpec } from '../hardware'
+import { loadConfigFixture } from '@/test/fixtures'
+import { reapInputs as inputs } from '@/test/reap'
 import type { RawConfig } from '../model-config'
 
 import { estimateReap } from './compute'
 import { detectMoeShape } from './moe-shape'
-import {
-  DEFAULT_MFU,
-  DEFAULT_MICRO_BATCH,
-  DEFAULT_OVERHEAD_FACTOR,
-  DEFAULT_SETUP_SECONDS,
-  bytesPerParam,
-} from './presets'
-import { ReapInputError, type MoeShape, type ReapInputs } from './types'
+import { bytesPerParam } from './presets'
+import { ReapInputError, type MoeShape } from './types'
 
-const FIXTURES = path.join(__dirname, '..', 'kvcache', '__fixtures__', 'configs')
-
-function fixture(name: string): RawConfig {
-  return JSON.parse(readFileSync(path.join(FIXTURES, `${name}.json`), 'utf8')) as RawConfig
-}
+const fixture = loadConfigFixture
 
 const H200 = findGpu('h200') as GpuSpec
 const RTX_5090 = findGpu('rtx-5090') as GpuSpec
 const NVME = findStorage('nvme-pcie4') as StorageSpec
 const HOST_RAM = findStorage('pcie5-host-ram') as StorageSpec
-
-function inputs(overrides: Partial<ReapInputs> = {}): ReapInputs {
-  return {
-    calibrationSamples: 512,
-    sequenceLength: 2048,
-    pruneRatio: 0.4,
-    gpu: H200,
-    storage: NVME,
-    weightDtype: 'BF16',
-    mfu: DEFAULT_MFU,
-    overheadFactor: DEFAULT_OVERHEAD_FACTOR,
-    setupSeconds: DEFAULT_SETUP_SECONDS,
-    microBatchSize: DEFAULT_MICRO_BATCH,
-    scaleTopK: false,
-    ...overrides,
-  }
-}
 
 /**
  * Qwen3-30B-A3B as the llm-compressor REAP example describes it: 48 layers, 128

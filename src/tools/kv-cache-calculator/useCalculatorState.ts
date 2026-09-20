@@ -1,12 +1,7 @@
 import { useMemo } from 'react'
 
-import { DTYPES, type DtypeId, type Provider } from '@/lib/kvcache'
-import {
-  digitsOnly,
-  nonEmptyText,
-  useUrlSyncedState,
-  type UrlSchema,
-} from '@/lib/url-state'
+import { DTYPES, PROVIDER_ORDER, type DtypeId, type Provider } from '@/lib/kvcache'
+import { digitsOrNull, enumGuard, nonEmptyText, useUrlSyncedState, type UrlSchema } from '@/lib/url-state'
 
 export interface CalculatorInputs {
   provider: Provider
@@ -26,13 +21,8 @@ export const DEFAULT_SEQUENCE_COUNT = '1'
 
 const DTYPE_IDS = DTYPES.map((dtype) => dtype.id)
 
-function isDtype(value: string | null): value is DtypeId {
-  return value !== null && DTYPE_IDS.includes(value as DtypeId)
-}
-
-function isProvider(value: string | null): value is Provider {
-  return value === 'huggingface' || value === 'modelscope'
-}
+const isDtype = enumGuard(DTYPE_IDS)
+const isProvider = enumGuard(PROVIDER_ORDER)
 
 /**
  * Inputs live in the query string so a calculation can be shared or reloaded.
@@ -46,8 +36,8 @@ export const CALCULATOR_SCHEMA: UrlSchema<CalculatorInputs> = {
     parse: (raw) => (isProvider(raw) ? raw : null),
   },
   modelId: { param: 'model', default: DEFAULT_MODEL_ID, parse: nonEmptyText },
-  contextLength: { param: 'context', default: DEFAULT_CONTEXT_LENGTH, parse: digitsOnly },
-  sequenceCount: { param: 'sequences', default: DEFAULT_SEQUENCE_COUNT, parse: digitsOnly },
+  contextLength: { param: 'context', default: DEFAULT_CONTEXT_LENGTH, parse: digitsOrNull },
+  sequenceCount: { param: 'sequences', default: DEFAULT_SEQUENCE_COUNT, parse: digitsOrNull },
   kvCacheDtype: {
     param: 'kv_dtype',
     default: 'BF16',
@@ -92,11 +82,3 @@ export function useCalculatorState() {
   return { inputs, update, serialized, seeded }
 }
 
-/** Parses a text field into a positive integer, or null when it is not one. */
-export function parsePositiveInteger(value: string): number | null {
-  const trimmed = value.trim()
-  if (!/^\d+$/.test(trimmed)) return null
-  const parsed = Number(trimmed)
-  if (!Number.isSafeInteger(parsed) || parsed < 1) return null
-  return parsed
-}

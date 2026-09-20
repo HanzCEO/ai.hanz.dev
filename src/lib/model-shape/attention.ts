@@ -4,13 +4,17 @@ import type { RawConfig } from '../model-config'
 /**
  * Parameters in one attention block.
  *
- * Two layouts cover almost every MoE release: grouped query attention, and the
+ * Two layouts cover almost every release: grouped query attention, and the
  * compressed latent of multi head latent attention. Anything unrecognised falls
  * back to a plain transformer block of four hidden by hidden matrices.
  *
  * DeepSeek V4 style compressed attention has no kv_lora_rank, so it lands on the
  * grouped query path and its attention weights are overstated. Attention is a
- * small share of a large MoE, so the error stays inside the estimate.
+ * small share of a large model, so the error stays inside the estimate.
+ *
+ * This is plain config arithmetic with no dependency on any particular pruning
+ * or distillation method, which is why it lives outside the REAP estimator and
+ * is shared by every calculator that has to size a block.
  */
 export function attentionParamsPerLayer(config: RawConfig): number {
   const { inner, outer } = unwrapConfig(config)
