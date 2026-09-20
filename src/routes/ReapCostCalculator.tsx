@@ -89,7 +89,7 @@ export default function ReapCostCalculator() {
 
       <ToolHeader
         title="REAP Cost Calculator"
-        description="This REAP duration calculator estimates how long a Router-weighted Expert Activation Pruning run takes on your hardware, whether one expert block fits in your VRAM, and how much smaller the pruned model gets. The shape is read from a HuggingFace or ModelScope config, a config.json you paste, or numbers you type."
+        description="This REAP duration calculator estimates the duration of a run of Router-weighted Expert Activation Pruning on your hardware. It also shows whether one expert block fits in your VRAM, and how much smaller the pruned model becomes. The calculator reads the model shape from a HuggingFace or ModelScope config. You can also paste a config.json or enter the values yourself."
       />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">

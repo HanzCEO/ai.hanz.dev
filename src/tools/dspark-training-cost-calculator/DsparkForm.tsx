@@ -32,21 +32,21 @@ import { activePresetId, type DsparkFormInputs, type InputMode } from './useDspa
 import type { DsparkShapeState } from './useDsparkShape'
 
 const MODE_LABELS: Array<{ id: InputMode; label: string; hint: string }> = [
-  { id: 'hub', label: 'Model id', hint: 'Read the target config from HuggingFace or ModelScope.' },
-  { id: 'paste', label: 'Paste config', hint: 'Paste a target config.json you already have.' },
-  { id: 'manual', label: 'Enter numbers', hint: 'Describe the target by hand.' },
+  { id: 'hub', label: 'Model id', hint: 'Read the config of the target from HuggingFace or ModelScope.' },
+  { id: 'paste', label: 'Paste config', hint: 'Paste a config.json for the target that you already have.' },
+  { id: 'manual', label: 'Enter numbers', hint: 'Enter the target values yourself.' },
 ]
 
 const DATA_MODE_LABELS = [
   {
     id: 'offline' as const,
-    label: 'Precompute the cache',
-    hint: 'Runs the target once to write its hidden states to disk, then trains without it. Cheap in VRAM, very expensive in storage.',
+    label: 'Write the cache first',
+    hint: 'The run sends the target through once and writes its hidden states to storage. Training then runs without the target. It needs little VRAM and a lot of storage.',
   },
   {
     id: 'online' as const,
     label: 'Capture online',
-    hint: 'Captures the target hidden states during training and writes nothing. Needs the whole target resident for the entire run.',
+    hint: 'The run captures the target hidden states during training and writes nothing. It needs the whole target in VRAM for the entire run.',
   },
 ]
 
@@ -97,7 +97,7 @@ export default function DsparkForm({
             value={inputs.modelId}
             onChange={(modelId) => update({ modelId })}
             status={shapeState.status}
-            idleHint="Type a target model id."
+            idleHint="Type a model id for the target."
             summary={
               shapeState.shape && (
                 <>
@@ -142,7 +142,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-ffn"
             label="intermediate_size"
-            hint="Dense feed forward width."
+            hint="The width of the feed forward block."
             min={1}
             value={inputs.intermediateSize}
             onChange={(intermediateSize) => update({ intermediateSize })}
@@ -157,7 +157,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-vocab"
             label="vocab_size"
-            hint="Sets the Markov head and the shared embedding."
+            hint="This value sets the Markov head and the shared embedding."
             min={1}
             value={inputs.vocabSize}
             onChange={(vocabSize) => update({ vocabSize })}
@@ -186,7 +186,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-experts"
             label="routed experts"
-            hint="Zero for a dense target."
+            hint="Use 0 for a dense target."
             min={0}
             value={inputs.routedExperts}
             onChange={(routedExperts) => update({ routedExperts })}
@@ -194,7 +194,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-topk"
             label="experts per token"
-            hint="The router top-k. Ignored on a dense target."
+            hint="The router top-k. The calculator ignores it on a dense target."
             min={0}
             value={inputs.expertsPerToken}
             onChange={(expertsPerToken) => update({ expertsPerToken })}
@@ -202,7 +202,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-expert-ffn"
             label="moe_intermediate_size"
-            hint="Width of one expert."
+            hint="The width of one expert."
             min={0}
             value={inputs.moeIntermediateSize}
             onChange={(moeIntermediateSize) => update({ moeIntermediateSize })}
@@ -260,8 +260,8 @@ export default function DsparkForm({
           </Select>
           <p className="text-xs text-muted-foreground">
             {preset
-              ? `${preset.note} ${presetTrainingTokens(preset).toLocaleString('en-US')} tokens in one pass.`
-              : 'Set your own sample count, sequence length and epoch count below.'}
+              ? `${preset.note} One pass uses ${presetTrainingTokens(preset).toLocaleString('en-US')} tokens.`
+              : 'Set your own sample count, sequence length, and epoch count below.'}
           </p>
         </div>
 
@@ -269,7 +269,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-samples"
             label="Samples"
-            hint="Sequences in the training set."
+            hint="The sequences in the training set."
             min={1}
             value={inputs.samples}
             onChange={(samples) => update({ samples })}
@@ -286,7 +286,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-epochs"
             label="Epochs"
-            hint="The paper trains each drafter for 10."
+            hint="The paper trains each drafter for 10 epochs."
             min={1}
             value={inputs.epochs}
             onChange={(epochs) => update({ epochs })}
@@ -296,7 +296,7 @@ export default function DsparkForm({
 
         <p className="text-xs text-muted-foreground">
           {tokens > 0
-            ? `${tokens.toLocaleString('en-US')} tokens in one pass, read ${inputs.epochs || '0'} time${inputs.epochs === '1' ? '' : 's'}. This product, not the sample count alone, is what drives both the cache and the run.`
+            ? `One pass holds ${tokens.toLocaleString('en-US')} tokens, read ${inputs.epochs || '0'} time${inputs.epochs === '1' ? '' : 's'}. This product, and not the sample count alone, sets both the target cache and the duration.`
             : 'Enter a sample count and a sequence length to size the run.'}
         </p>
 
@@ -315,7 +315,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-target-layers"
             label="Captured target layers"
-            hint="Each one adds a hidden state per token to the cache. Five is the published setting, and fewer is the main way to shrink the cache."
+            hint="Each layer adds 1 hidden state for each token to the target cache. The published setting is 5. Fewer layers are the main way to make the target cache smaller."
             min={1}
             value={inputs.numTargetLayers}
             onChange={(numTargetLayers) => update({ numTargetLayers })}
@@ -324,7 +324,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-draft-layers"
             label="Draft layers"
-            hint="Backbone depth. Five matches the published drafters."
+            hint="The backbone depth. The published drafters use 5."
             min={1}
             value={inputs.numDraftLayers}
             onChange={(numDraftLayers) => update({ numDraftLayers })}
@@ -333,7 +333,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-block"
             label="Block size"
-            hint="Tokens drafted per block, the gamma of the paper."
+            hint="The tokens drafted in each block. This is gamma in the paper."
             min={1}
             value={inputs.blockSize}
             onChange={(blockSize) => update({ blockSize })}
@@ -342,7 +342,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-anchors"
             label="Anchors per sequence"
-            hint="Blocks sampled from each sequence per step. Capped at one block per sequence token, so a short sequence needs fewer."
+            hint="The blocks sampled from each sequence at each step. The run caps this at 1 block for each sequence token, so a short sequence needs fewer."
             min={1}
             value={inputs.numAnchors}
             onChange={(numAnchors) => update({ numAnchors })}
@@ -351,7 +351,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-markov"
             label="Markov rank"
-            hint="Rank of the sequential head. Zero disables it, leaving a purely parallel drafter."
+            hint="The rank of the sequential head. A rank of 0 disables it and leaves a fully parallel drafter."
             min={0}
             value={inputs.markovRank}
             onChange={(markovRank) => update({ markovRank })}
@@ -362,7 +362,7 @@ export default function DsparkForm({
         <p className="text-xs text-muted-foreground">
           The published recipe trains at a learning rate of {DEFAULT_LEARNING_RATE} with a{' '}
           {DEFAULT_WARMUP_RATIO * 100} percent warmup and an effective batch of{' '}
-          {DEFAULT_GLOBAL_BATCH_SIZE}. Neither affects the cost, so neither is an input here.
+          {DEFAULT_GLOBAL_BATCH_SIZE}. Neither value changes the cost, so neither is an input here.
         </p>
       </fieldset>
 
@@ -379,15 +379,15 @@ export default function DsparkForm({
             onValueChange={(gpuId) => update({ gpuId })}
           />
           <p className="text-xs text-muted-foreground">
-            {gpu.vramGiB} GB of memory, {gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS
-            dense in bf16. {gpu.note}
+            This GPU has {gpu.vramGiB} GB of VRAM and{' '}
+            {gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense in bf16. {gpu.note}
           </p>
         </div>
 
         <NumberField
           id="dspark-gpu-count"
-          label="Cards"
-          hint="The run shards across these. The reference configurations assume a single node of eight."
+          label="GPU count"
+          hint="The run divides across these GPUs. The reference configurations assume 1 node of 8."
           min={1}
           value={inputs.gpuCount}
           onChange={(gpuCount) => update({ gpuCount })}
@@ -396,7 +396,7 @@ export default function DsparkForm({
 
         <div className="flex flex-col gap-2">
           <label htmlFor="dspark-storage" className="text-sm font-medium">
-            Where the target cache lives
+            Target cache storage
           </label>
           <Select
             value={inputs.storageId}
@@ -423,8 +423,8 @@ export default function DsparkForm({
           </Select>
           <p className="text-xs text-muted-foreground">
             {inputs.dataMode === 'offline'
-              ? 'The cache is read back once per epoch, so this decides whether the run is bound by the GPU or by the disk.'
-              : 'Online capture writes nothing, so this only affects where the target checkpoint is read from.'}
+              ? 'The run reads the target cache back in each epoch. This setting therefore decides whether the GPU or the storage sets the bound.'
+              : 'Online capture writes nothing, so this setting only changes where the run reads the target checkpoint.'}
           </p>
         </div>
 
@@ -432,7 +432,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-mfu"
             label="Utilisation"
-            hint="Fraction of peak."
+            hint="The fraction of the peak."
             min={0}
             decimal
             value={inputs.mfu}
@@ -442,7 +442,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-overhead"
             label="Overhead"
-            hint="Multiplier over the bound."
+            hint="The multiplier over the bound."
             min={1}
             decimal
             value={inputs.overheadFactor}
@@ -452,7 +452,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-micro-batch"
             label="Micro batch"
-            hint="Sequences in flight."
+            hint="The sequences in flight at once."
             min={1}
             value={inputs.microBatchSize}
             onChange={(microBatchSize) => update({ microBatchSize })}

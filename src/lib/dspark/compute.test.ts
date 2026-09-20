@@ -554,7 +554,7 @@ describe('the anchor cap', () => {
     const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 512 }))
     const steps = result.steps.map((step) => step.detail).join(' ')
     expect(steps).toContain('were reduced to 85')
-    expect(result.assumptions.some((line) => line.includes('capped at 85'))).toBe(true)
+    expect(result.assumptions.some((line) => line.includes('caps the anchor count at 85'))).toBe(true)
   })
 })
 

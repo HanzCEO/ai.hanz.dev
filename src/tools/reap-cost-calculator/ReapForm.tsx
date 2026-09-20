@@ -31,8 +31,8 @@ import type { InputMode, ReapFormInputs } from './useReapState'
 
 const MODE_LABELS: Array<{ id: InputMode; label: string; hint: string }> = [
   { id: 'hub', label: 'Model id', hint: 'Read the config from HuggingFace or ModelScope.' },
-  { id: 'paste', label: 'Paste config', hint: 'Paste a config.json you already have.' },
-  { id: 'manual', label: 'Enter numbers', hint: 'Describe the model by hand.' },
+  { id: 'paste', label: 'Paste config', hint: 'Paste a config.json that you already have.' },
+  { id: 'manual', label: 'Enter numbers', hint: 'Enter the model values yourself.' },
 ]
 
 /** The preset whose sample count and length match the current inputs. */
@@ -122,7 +122,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-moe-ffn"
             label="moe_intermediate_size"
-            hint="Width of one expert."
+            hint="The width of one expert."
             min={1}
             value={inputs.moeIntermediateSize}
             onChange={(moeIntermediateSize) => update({ moeIntermediateSize })}
@@ -152,7 +152,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-moe-layers"
             label="layers with experts"
-            hint="The rest are dense MLPs."
+            hint="The other blocks have dense MLPs."
             min={1}
             value={inputs.moeLayers}
             onChange={(moeLayers) => update({ moeLayers })}
@@ -160,7 +160,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-shared"
             label="shared experts"
-            hint="Always-on experts. Zero for most models."
+            hint="These experts always run. Most models use 0."
             min={0}
             value={inputs.sharedExperts}
             onChange={(sharedExperts) => update({ sharedExperts })}
@@ -168,7 +168,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-ffn"
             label="intermediate_size"
-            hint="Dense MLP width, used by non-expert layers."
+            hint="The dense MLP width. The blocks without experts use it."
             min={1}
             value={inputs.intermediateSize}
             onChange={(intermediateSize) => update({ intermediateSize })}
@@ -303,7 +303,8 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           </label>
           <GpuSelect id="reap-gpu" value={inputs.gpuId} onValueChange={(gpuId) => update({ gpuId })} />
           <p className="text-xs text-muted-foreground">
-            {gpu.vramGiB} GB of memory, {gpu.bandwidthGBs.toLocaleString('en-US')} GB/s. {gpu.note}
+            This GPU has {gpu.vramGiB} GB of VRAM and {gpu.bandwidthGBs.toLocaleString('en-US')}{' '}
+            GB/s of memory bandwidth. {gpu.note}
           </p>
         </div>
 
@@ -316,7 +317,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
 
         <div className="flex flex-col gap-2">
           <label htmlFor="reap-storage" className="text-sm font-medium">
-            Where the weights are read from
+            Weight storage
           </label>
           <Select
             value={inputs.storageId}
@@ -342,7 +343,8 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            The layer-wise observer streams one block at a time, so a slow disk can become the limit.
+            The layer-wise observer reads one expert block at a time. Slow storage can therefore set
+            the duration.
           </p>
         </div>
       </fieldset>
@@ -354,7 +356,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-mfu"
             label="GPU utilisation"
-            hint="A share of dense peak, between 0 and 1. A third is realistic."
+            hint="A share of the dense peak, between 0 and 1. One third is realistic."
             decimal
             value={inputs.mfu}
             onChange={(mfu) => update({ mfu })}
@@ -363,7 +365,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-overhead"
             label="Overhead factor"
-            hint="Framework, observer, and dataloader cost over the raw figure."
+            hint="The framework, observer, and dataloader cost over the raw value."
             decimal
             min={1}
             value={inputs.overheadFactor}
@@ -373,7 +375,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
           <NumberField
             id="reap-micro-batch"
             label="Micro batch"
-            hint="Samples in flight at once. Drives the activation buffer."
+            hint="The samples in flight at once. This value sets the activation buffer."
             min={1}
             value={inputs.microBatchSize}
             onChange={(microBatchSize) => update({ microBatchSize })}
@@ -391,8 +393,8 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
               Reduce the router top-k
             </label>
             <p className="text-xs text-muted-foreground">
-              Off by default. Pruning alone shrinks the model in memory but leaves the arithmetic per
-              token unchanged.
+              This option is off by default. Pruning alone makes the model smaller in VRAM. It does
+              not change the arithmetic for each token.
             </p>
           </div>
         </div>

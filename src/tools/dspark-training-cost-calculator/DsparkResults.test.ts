@@ -121,7 +121,7 @@ describe('DsparkResults with a pasted target config', () => {
     const html = render(QWEN3_4B)
     expect(html).toContain('How long does the run take?')
     expect(visibleText(html)).toMatch(
-      /limited by the (GPU doing the arithmetic|storage feeding the cache back)/,
+      /limited by the (GPU that does the arithmetic|storage that feeds the target cache back)/,
     )
   })
 
@@ -129,12 +129,12 @@ describe('DsparkResults with a pasted target config', () => {
     const html = render(QWEN3_4B)
     expect(html).toContain('Does it fit in VRAM?')
     expect(html).toContain('RTX 5090')
-    expect(html).toMatch(/Fits|Needs offline capture|Needs more cards|Needs offloading/)
+    expect(html).toMatch(/Fits|Needs offline capture|Needs more GPUs|Needs offloading/)
   })
 
-  it('renders the draft model cost', () => {
+  it('renders the drafter cost', () => {
     const html = render(QWEN3_4B)
-    expect(html).toContain('What does the draft model cost?')
+    expect(html).toContain('What does the drafter cost?')
     expect(html).toContain('percent of the target')
     expect(html).toContain('Markov head')
   })
@@ -142,11 +142,11 @@ describe('DsparkResults with a pasted target config', () => {
   it('says the target is not resident offline and is online', () => {
     const offline = render(QWEN3_4B, { dataMode: 'offline' })
     const online = render(QWEN3_4B, { dataMode: 'online' })
-    expect(offline).toContain('the target is not resident while the drafter trains')
+    expect(offline).toContain('the target out of VRAM while the drafter trains')
     expect(online).toContain('keeps the')
-    expect(online).toContain('target resident for the whole run')
+    expect(online).toContain('target in VRAM for the whole run')
     // Online writes no cache, so the cache section says so instead of a size.
-    expect(online).toContain('No cache, because the target is captured online')
+    expect(online).toContain('No target cache, because the run captures the target online')
   })
 
   it('recommends offline capture when only the resident target breaks the budget', () => {
@@ -163,13 +163,13 @@ describe('DsparkResults with a pasted target config', () => {
       storage: findStorage('network-10gbe')!,
       gpuCount: 8,
     })
-    expect(visibleText(html)).toContain('storage feeding the cache back')
-    expect(visibleText(html)).toContain('of reading the cache back')
+    expect(visibleText(html)).toContain('storage that feeds the target cache back')
+    expect(visibleText(html)).toContain('of target cache reads')
   })
 
   it('stays bound by compute when the cache sits in host memory', () => {
     const html = render(QWEN3_4B, { gpuCount: 8 })
-    expect(visibleText(html)).toContain('the GPU doing the arithmetic')
+    expect(visibleText(html)).toContain('the GPU that does the arithmetic')
   })
 
   it('renders a mixture of experts target without falling over', () => {
@@ -177,7 +177,7 @@ describe('DsparkResults with a pasted target config', () => {
     // wiring rather than the expert arithmetic, which the engine tests cover.
     const html = render(readConfigFixtureText('glm-5-3'))
     expect(html).toContain('Estimated training run')
-    expect(html).toMatch(/Fits|Needs offline capture|Needs more cards|Needs offloading/)
+    expect(html).toMatch(/Fits|Needs offline capture|Needs more GPUs|Needs offloading/)
   })
 })
 
@@ -199,7 +199,7 @@ describe('DsparkResults in the idle, error and compute error states', () => {
         computeError: null,
       }),
     )
-    expect(html).toContain('Enter a target model')
+    expect(html).toContain('Enter a target')
   })
 
   it('surfaces a config that is not a decoder', () => {
@@ -215,7 +215,7 @@ describe('DsparkResults in the idle, error and compute error states', () => {
         computeError: null,
       }),
     )
-    expect(html).toContain('Could not read that target config')
+    expect(html).toContain('Could not read the target config')
     expect(html).toContain('That config does not describe a decoder.')
   })
 
@@ -229,10 +229,10 @@ describe('DsparkResults in the idle, error and compute error states', () => {
           shape: detectDsparkShape(JSON.parse(QWEN3_4B)),
         },
         gpu: RTX_5090,
-        computeError: 'Epochs must be a whole number of one or more.',
+        computeError: 'Epochs must be a whole number of 1 or more.',
       }),
     )
     expect(html).toContain('Those inputs cannot be costed')
-    expect(html).toContain('Epochs must be a whole number of one or more.')
+    expect(html).toContain('Epochs must be a whole number of 1 or more.')
   })
 })

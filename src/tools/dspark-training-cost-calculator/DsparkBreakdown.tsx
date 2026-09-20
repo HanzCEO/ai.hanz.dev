@@ -18,51 +18,57 @@ export default function DsparkBreakdown({ result }: { result: DsparkResult }) {
             value="cache"
             label="Target cache in detail"
             rows={[
-              ['Per token', formatBytes(result.cacheBytesPerToken).text],
+              ['For each token', formatBytes(result.cacheBytesPerToken).text],
               ['Captured layers', `${result.numTargetLayers}`],
-              ['Whole cache', offline ? formatBytes(result.cacheBytes).text : 'not written'],
-              ['Time to write', offline ? `${(result.cacheWriteSeconds / 60).toFixed(1)} minutes` : 'nothing to write'],
-              ['Time to read back', offline ? `${(result.cacheReadSeconds / 3600).toFixed(2)} hours` : 'nothing to read'],
+              ['Whole target cache', offline ? formatBytes(result.cacheBytes).text : 'not written'],
+              [
+                'Write duration',
+                offline ? `${(result.cacheWriteSeconds / 60).toFixed(1)} minutes` : 'nothing to write',
+              ],
+              [
+                'Read duration',
+                offline ? `${(result.cacheReadSeconds / 3600).toFixed(2)} hours` : 'nothing to read',
+              ],
             ]}
             note={
               offline
-                ? 'The cache is written once during preparation and read back once per epoch, which is why the read time scales with the epoch count and the write time does not.'
-                : 'Online capture never materialises the cache, so none of these figures apply. The target stays resident instead.'
+                ? 'The run writes the target cache once during preparation. It reads the target cache back once in each epoch. The read duration therefore scales with the epoch count, and the write duration does not.'
+                : 'Online capture never writes the target cache. None of these values apply. The target stays in VRAM instead.'
             }
           />
           <BreakdownItem
             value="draft"
-            label="Draft model in detail"
+            label="Drafter in detail"
             rows={[
               ['Backbone', formatBytes(result.draftBackboneParams * 2).text],
               ['Feature projection', formatBytes(result.draftProjectionParams * 2).text],
               ['Markov head', formatBytes(result.draftMarkovParams * 2).text],
               ['Confidence head', formatBytes(result.draftConfidenceParams * 2).text],
-              ['Total, bf16', formatBytes(result.draftWeightBytes).text],
+              ['Total in bf16', formatBytes(result.draftWeightBytes).text],
               ['Shared and frozen', formatBytes(result.shape.totalParams * 2).text],
             ]}
-            note="The shared line is the target embedding and language model head. They are loaded for the forward pass but never updated, so they are not part of the trained parameter count."
+            note="The shared line is the target embedding and the language model head. The run loads them for the forward pass but never updates them. They are therefore not part of the trained parameter count."
           />
           <BreakdownItem
             value="memory"
-            label="Memory in detail"
+            label="VRAM in detail"
             rows={[
-              ['Draft weights, bf16', formatBytes(result.draftWeightBytes).text],
+              ['Drafter weights in bf16', formatBytes(result.draftWeightBytes).text],
               ['Optimizer state', formatBytes(result.optimizerBytes).text],
               ['Gradients', formatBytes(result.gradientBytes).text],
               ['Activation buffer', formatBytes(result.activationBytes).text],
               [
                 'Resident target',
-                offline ? 'not resident' : formatBytes(result.targetWeightBytes).text,
+                offline ? 'not in VRAM' : formatBytes(result.targetWeightBytes).text,
               ],
               ['Framework and kernels', formatBytes(result.runtimeReserveBytes).text],
               ['Peak resident', formatBytes(result.peakVramBytes).text],
-              ['Card memory', formatBytes(result.vramBytes).text],
+              ['GPU VRAM', formatBytes(result.vramBytes).text],
             ]}
             note={
               offline
-                ? 'The target ran once, while the cache was being built, and is not resident during training. That is what keeps the peak low enough for a single card.'
-                : 'Online capture keeps the target loaded for the whole run, so its weights are part of the peak. Switching to offline capture removes that line.'
+                ? 'The target ran once, while the run built the target cache. The target is not in VRAM during training. That is why the peak is low enough for one GPU.'
+                : 'Online capture keeps the target in VRAM for the whole run, so its weights are part of the peak. Offline capture removes that line.'
             }
           />
         </>

@@ -48,13 +48,13 @@ function clamp(value: number, low: number, high: number): number {
 function validate(inputs: ReapInputs): void {
   if (!Number.isInteger(inputs.calibrationSamples) || inputs.calibrationSamples < 1) {
     throw new ReapInputError(
-      'Calibration samples must be a whole number of one or more.',
+      'Calibration samples must be a whole number of 1 or more.',
       'samples',
     )
   }
   if (!Number.isInteger(inputs.sequenceLength) || inputs.sequenceLength < 1) {
     throw new ReapInputError(
-      'Sequence length must be a whole number of one or more.',
+      'Sequence length must be a whole number of 1 or more.',
       'sequenceLength',
     )
   }
@@ -64,19 +64,19 @@ function validate(inputs: ReapInputs): void {
     inputs.pruneRatio > MAX_PRUNE_RATIO
   ) {
     throw new ReapInputError(
-      `The pruning ratio must be between 0 and ${MAX_PRUNE_RATIO}. Past that the expert bank stops resembling the original model.`,
+      `The pruning ratio must be between 0 and ${MAX_PRUNE_RATIO}. A higher value removes too much of the expert bank.`,
       'pruneRatio',
     )
   }
   if (!Number.isFinite(inputs.mfu) || inputs.mfu <= 0 || inputs.mfu > 1) {
-    throw new ReapInputError('Model factory utilisation must be above 0 and at most 1.', 'mfu')
+    throw new ReapInputError('Model factory utilisation must be more than 0 and at most 1.', 'mfu')
   }
   if (!Number.isFinite(inputs.overheadFactor) || inputs.overheadFactor < 1) {
     throw new ReapInputError('The overhead factor must be at least 1.', 'overheadFactor')
   }
   if (!Number.isInteger(inputs.microBatchSize) || inputs.microBatchSize < 1) {
     throw new ReapInputError(
-      'The micro batch size must be a whole number of one or more.',
+      'The micro batch size must be a whole number of 1 or more.',
       'microBatchSize',
     )
   }
@@ -113,7 +113,7 @@ function notMoeResult(inputs: ReapInputs): ReapResult {
     steps: [],
     constants: [],
     assumptions: [
-      'REAP removes experts from a sparsely activated mixture of experts. This model has no expert bank, so there is nothing to prune.',
+      'REAP removes experts from a sparsely activated mixture of experts. This model has no expert bank. Therefore the calculator has nothing to prune.',
     ],
   }
 }
@@ -214,42 +214,42 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
   const steps = [
     {
       label: 'Calibration tokens',
-      detail: `${inputs.calibrationSamples.toLocaleString('en-US')} samples times ${inputs.sequenceLength.toLocaleString('en-US')} tokens each is ${tokens.toLocaleString('en-US')} tokens. This product, not the sample count alone, is what drives the run.`,
+      detail: `${inputs.calibrationSamples.toLocaleString('en-US')} samples times ${inputs.sequenceLength.toLocaleString('en-US')} tokens each gives ${tokens.toLocaleString('en-US')} tokens. This product, and not the sample count alone, sets the cost of the run.`,
     },
     {
       label: 'Active parameters per token',
-      detail: `${shape.numLayers.toLocaleString('en-US')} blocks of attention, plus ${shape.moeLayers.toLocaleString('en-US')} expert banks each touching ${shape.expertsPerToken} of ${shape.routedExperts.toLocaleString('en-US')} experts, is ${shape.activeParamsPerToken.toLocaleString('en-US')} parameters per token.`,
+      detail: `The model has ${shape.numLayers.toLocaleString('en-US')} blocks, and each one has attention. The ${shape.moeLayers.toLocaleString('en-US')} expert banks each send a token to ${shape.expertsPerToken} of ${shape.routedExperts.toLocaleString('en-US')} experts. One token therefore touches ${shape.activeParamsPerToken.toLocaleString('en-US')} parameters.`,
     },
     {
       label: 'Arithmetic',
-      detail: `2 times ${tokens.toLocaleString('en-US')} tokens times ${shape.activeParamsPerToken.toLocaleString('en-US')} parameters is ${flops.toExponential(3)} FLOPs.`,
+      detail: `2 times ${tokens.toLocaleString('en-US')} tokens times ${shape.activeParamsPerToken.toLocaleString('en-US')} parameters gives ${flops.toExponential(3)} FLOPs.`,
     },
     {
-      label: 'Compute time',
-      detail: `${(peak / 1e12).toLocaleString('en-US')} TFLOPS dense at ${(inputs.mfu * 100).toFixed(0)} percent utilisation gives ${(computeSeconds / 3600).toFixed(2)} hours.`,
+      label: 'Arithmetic duration',
+      detail: `The GPU reaches ${(peak / 1e12).toLocaleString('en-US')} TFLOPS dense. At ${(inputs.mfu * 100).toFixed(0)} percent utilisation, the arithmetic takes ${(computeSeconds / 3600).toFixed(2)} hours.`,
     },
     {
-      label: 'Weight streaming time',
-      detail: `${weightBytes.toLocaleString('en-US')} bytes of weights at ${inputs.storage.bandwidthGBs} GB/s is ${(streamSeconds / 3600).toFixed(2)} hours.`,
+      label: 'Weight streaming duration',
+      detail: `The run reads ${weightBytes.toLocaleString('en-US')} bytes of weights from storage at ${inputs.storage.bandwidthGBs} GB/s. That takes ${(streamSeconds / 3600).toFixed(2)} hours.`,
     },
     {
       label: 'Estimate',
-      detail: `The slower of the two is the ${bound} bound, so ${(estimateSeconds / 3600).toFixed(2)} hours after the ${inputs.overheadFactor} times overhead and ${(inputs.setupSeconds / 60).toFixed(0)} minutes of setup.`,
+      detail: `The slower value sets the bound, and that bound is ${bound === 'compute' ? 'the arithmetic' : 'the weight stream'}. The estimate is ${(estimateSeconds / 3600).toFixed(2)} hours, after ${inputs.overheadFactor} times overhead and ${(inputs.setupSeconds / 60).toFixed(0)} minutes of setup.`,
     },
     {
-      label: 'One block in memory',
-      detail: `The largest resident set is a single decoder block: ${shape.routedExperts.toLocaleString('en-US')} experts plus attention and router is ${perMoELayerParams.toLocaleString('en-US')} parameters, or ${(perMoELayerBytes / GIB).toFixed(1)} GiB at ${inputs.weightDtype}.`,
+      label: 'One expert block in VRAM',
+      detail: `The largest resident set is 1 expert block. ${shape.routedExperts.toLocaleString('en-US')} experts plus attention and the router gives ${perMoELayerParams.toLocaleString('en-US')} parameters. That is ${(perMoELayerBytes / GIB).toFixed(1)} GiB at ${inputs.weightDtype}.`,
     },
     {
       label: 'After pruning',
-      detail: `Keeping ${keptExperts.toLocaleString('en-US')} of ${routedExperts.toLocaleString('en-US')} experts per layer removes ${(reductionPercent).toFixed(1)} percent of the parameters.`,
+      detail: `The run keeps ${keptExperts.toLocaleString('en-US')} of ${routedExperts.toLocaleString('en-US')} experts in each expert block. That removes ${(reductionPercent).toFixed(1)} percent of the parameters.`,
     },
   ]
 
   const constants = [
     { key: 'hidden_size', value: shape.hiddenSize, source: 'config' },
     { key: 'num_hidden_layers', value: shape.numLayers, source: 'config' },
-    { key: 'moe_layers', value: shape.moeLayers, source: 'derived from the config layer pattern' },
+    { key: 'moe_layers', value: shape.moeLayers, source: 'derived from the layer pattern in the config' },
     { key: 'routed_experts', value: shape.routedExperts, source: 'config' },
     { key: 'experts_per_token', value: shape.expertsPerToken, source: 'config' },
     { key: 'moe_intermediate_size', value: shape.moeIntermediateSize, source: 'config' },
@@ -257,20 +257,20 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
     {
       key: 'params_per_expert',
       value: shape.paramsPerExpert,
-      source: '3 x hidden_size x moe_intermediate_size, the gate, up, and down projections',
+      source: '3 x hidden_size x moe_intermediate_size. These are the gate, up, and down projections.',
     },
     { key: 'attention_params_per_layer', value: shape.attentionParamsPerLayer, source: 'derived from the attention layout' },
-    { key: 'total_params', value: shape.totalParams, source: 'sum over every layer, including embeddings' },
+    { key: 'total_params', value: shape.totalParams, source: 'the sum over every block, including the embeddings' },
   ]
 
   const assumptions = [
-    'Experts use SwiGLU, so each carries three projections: gate, up, and down. An expert with two projections would be a third smaller.',
-    'Attention parameters are counted once and applied to every block. On a hybrid model whose linear layers differ from its full attention layers, this is an approximation.',
-    'The router is left out of the active parameter count. It is a single small matmul per block, under one percent of the block here.',
-    'Calibration uses the layer-wise observer, which keeps one decoder block resident at a time. That is what makes a single card enough.',
-    'Model factory utilisation absorbs kernel efficiency. Dense tensor throughput is rarely reached in practice, so a third is a realistic target and the figure to trust is the estimate, not the raw FLOPs.',
-    'The overhead factor covers the activation hooks, the saliency reduction, and the dataloader, none of which appear in the FLOPs figure.',
-    'REAP shrinks the model in memory. It does not reduce the arithmetic per token unless the router top-k is reduced as well.',
+    'The experts use SwiGLU. Each expert therefore carries 3 projections: gate, up, and down. An expert with 2 projections would be one third smaller.',
+    'The calculator counts the attention parameters once and applies them to every block. A hybrid model has linear layers that differ from its full attention layers. For that model, this is an approximation.',
+    'The calculator leaves the router out of the active parameter count. The router is 1 small matmul in each block. That is less than 1 percent of the block here.',
+    'The calibration uses the layer-wise observer. That observer keeps one expert block in VRAM at a time. Therefore one GPU is sufficient.',
+    'Model factory utilisation covers the kernel efficiency. Real runs rarely reach the dense throughput, so one third is a realistic value. Trust the estimate and not the raw FLOPs.',
+    'The overhead factor covers the activation hooks, the saliency reduction, and the dataloader. None of these appear in the FLOPs.',
+    'REAP makes the model smaller in VRAM. It does not reduce the arithmetic for each token unless the run also reduces the router top-k.',
     ...shape.notes,
   ]
 

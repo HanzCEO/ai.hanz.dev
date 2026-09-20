@@ -26,7 +26,7 @@ function tagFor(dtype: WeightDtype, gpu: GpuSpec): Tag {
   if (dtype === 'BF16') {
     return {
       level: 'supported',
-      reason: 'Reads at the precision most checkpoints ship in, and runs on every card listed.',
+      reason: 'This is the precision of most published checkpoints. It runs on every GPU in the list.',
     }
   }
 
@@ -34,18 +34,18 @@ function tagFor(dtype: WeightDtype, gpu: GpuSpec): Tag {
     if (gpu.fp8DenseTflops === null) {
       return {
         level: 'unsupported',
-        reason: `${gpu.label} has no FP8 tensor path, so the pass would run at the BF16 rate.`,
+        reason: `${gpu.label} has no FP8 tensor path. The calibration therefore runs at the BF16 throughput.`,
       }
     }
     return {
       level: 'supported',
-      reason: `Halves the resident block and runs at ${gpu.fp8DenseTflops.toLocaleString('en-US')} TFLOPS dense on ${gpu.label}.`,
+      reason: `This halves the resident expert block. It runs at ${gpu.fp8DenseTflops.toLocaleString('en-US')} TFLOPS dense on ${gpu.label}.`,
     }
   }
 
   return {
     level: 'untested',
-    reason: 'Needs a checkpoint that was already quantised to four bits. Calibrating one is not a published recipe.',
+    reason: 'It needs a checkpoint that is already quantised to 4 bits. No published recipe calibrates one.',
   }
 }
 

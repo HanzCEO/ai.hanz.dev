@@ -8,9 +8,9 @@ export interface WeightDtypeSpec {
 }
 
 export const WEIGHT_DTYPES: WeightDtypeSpec[] = [
-  { id: 'BF16', label: 'BF16', bytes: 2, note: 'Full precision weights. The largest resident block.' },
-  { id: 'FP8', label: 'FP8', bytes: 1, note: 'Half the bytes of BF16. Needs a Blackwell, Hopper, CDNA 3, or RDNA 4 card.' },
-  { id: 'INT4', label: 'INT4', bytes: 0.5, note: 'A quarter of BF16. Requires an already quantised checkpoint.' },
+  { id: 'BF16', label: 'BF16', bytes: 2, note: 'Full precision weights. This precision gives the largest expert block in VRAM.' },
+  { id: 'FP8', label: 'FP8', bytes: 1, note: 'Half the bytes of BF16. It needs a Blackwell, Hopper, CDNA 3, or RDNA 4 GPU.' },
+  { id: 'INT4', label: 'INT4', bytes: 0.5, note: 'A quarter of the bytes of BF16. It needs a checkpoint that is already quantised.' },
 ]
 
 export function bytesPerParam(dtype: WeightDtype): number {
@@ -38,21 +38,21 @@ export const CALIBRATION_PRESETS: CalibrationPreset[] = [
     label: 'Quick',
     samples: 512,
     sequenceLength: 2048,
-    note: 'The recipe used in the vLLM llm-compressor example. About 1 million tokens.',
+    note: 'This recipe comes from the vLLM llm-compressor example. It uses about 1 million tokens.',
   },
   {
     id: 'medium',
     label: 'Medium',
     samples: 4096,
     sequenceLength: 8192,
-    note: 'A middle setting. About 34 million tokens, enough for a stable saliency ranking.',
+    note: 'A middle setting. It uses about 34 million tokens. That is enough for a stable saliency ranking.',
   },
   {
     id: 'paper',
     label: 'Paper recipe',
     samples: 24576,
     sequenceLength: 16384,
-    note: 'The calibration mix published with REAP. About 403 million tokens.',
+    note: 'This is the calibration mix published with REAP. It uses about 403 million tokens.',
   },
 ]
 

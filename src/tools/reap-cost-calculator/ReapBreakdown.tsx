@@ -13,22 +13,22 @@ export default function ReapBreakdown({ result }: { result: ReapResult }) {
       assumptions={result.assumptions}
       constantsLabel="Values read from the config"
       extraPanels={
-        <BreakdownPanel value="memory" label="Memory in detail">
+        <BreakdownPanel value="memory" label="VRAM in detail">
           <dl className="text-sm">
             <Row label="One expert block" value={formatBytes(result.perMoELayerBytes).text} />
             <Row label="Activation buffer" value={formatBytes(result.activationBytes).text} />
             <Row
               label="Framework and kernels"
-                value={formatBytes(result.peakVramBytes - result.perMoELayerBytes - result.activationBytes).text}
-              />
+              value={formatBytes(result.peakVramBytes - result.perMoELayerBytes - result.activationBytes).text}
+            />
             <Row label="Peak resident" value={formatBytes(result.peakVramBytes).text} />
-            <Row label="Card memory" value={formatBytes(result.vramBytes).text} />
-            <Row label="All weights, on storage" value={formatBytes(result.weightBytes).text} />
+            <Row label="GPU VRAM" value={formatBytes(result.vramBytes).text} />
+            <Row label="All weights in storage" value={formatBytes(result.weightBytes).text} />
           </dl>
           <p className="text-muted-foreground mt-3 text-xs">
-            The layer-wise observer holds one decoder block at a time, so the peak is set by the
-            block and its activations, not by the whole model. The full weight set still has to live
-            somewhere, which is what the storage row is for.
+            The layer-wise observer holds 1 expert block at a time. The expert block and its
+            activations therefore set the peak, and not the whole model. The full set of weights
+            still needs storage.
           </p>
         </BreakdownPanel>
       }

@@ -133,7 +133,7 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     sequenceLength: 2048,
     epochs: 3,
     numAnchors: 292,
-    note: 'A smoke test, about 51 million tokens. Enough to prove the pipeline runs and the draft is learning, not enough to produce a drafter worth shipping.',
+    note: 'A smoke test, about 51 million tokens. It is enough to prove that the pipeline runs and that the drafter learns. It is not enough to produce a drafter worth shipping.',
   },
   {
     id: 'medium',
@@ -142,7 +142,7 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     sequenceLength: 4096,
     epochs: 5,
     numAnchors: 585,
-    note: 'A middle setting, about 512 million tokens. Roughly 0.4 of a pass over Open-PerfectBlend, enough for a usable drafter on one domain.',
+    note: 'A middle setting, about 512 million tokens. That is roughly 0.4 of a pass over Open-PerfectBlend, which is enough for a usable drafter on one domain.',
   },
   {
     id: 'deepspec',
@@ -151,7 +151,7 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     sequenceLength: 4096,
     epochs: 10,
     numAnchors: 512,
-    note: 'One pass over Open-PerfectBlend, about 1.24 billion tokens, read ten times, which is what the paper trained each drafter on. Roughly 38 TB of target cache against a Qwen3-4B target.',
+    note: 'One pass over Open-PerfectBlend, about 1.24 billion tokens, read 10 times. The paper trained each drafter on this set. It writes roughly 38 TB of target cache against a Qwen3-4B target.',
   },
   {
     id: 'minicpm5-2b-dspark',
@@ -160,7 +160,7 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     sequenceLength: 600,
     epochs: 6,
     numAnchors: 85,
-    note: 'The recipe OpenBMB published for openbmb/MiniCPM5-2B-DSpark: 1,959,525 sequences read six times, which is 7.05 billion tokens, or five times the unique data of the paper recipe. Their published draft checkpoint is 323,776,001 parameters and reaches an acceptance length of 5.52 at temperature 0.',
+    note: 'The recipe OpenBMB published for openbmb/MiniCPM5-2B-DSpark: 1,959,525 sequences read 6 times, which is 7.05 billion tokens. That is 5 times the unique data of the paper recipe. Their published drafter checkpoint is 323,776,001 parameters and reaches an acceptance length of 5.52 at temperature 0.',
   },
 ]
 

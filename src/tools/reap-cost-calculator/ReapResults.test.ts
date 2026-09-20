@@ -76,8 +76,8 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
   it('renders the post prune size', () => {
     const html = render(glm53Text)
     expect(html).toContain('How much smaller does it get?')
-    expect(html).toContain('experts kept')
-    expect(html).toMatch(/percent smaller model/)
+    expect(html).toContain('The run keeps')
+    expect(html).toMatch(/percent smaller/)
   })
 
   it('states that active compute is unchanged when the top-k is kept', () => {
@@ -85,7 +85,7 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
     expect(html).toContain('Active parameters per token are unchanged')
   })
 
-  it('states that reducing the top-k is where the speedup comes from', () => {
+  it('states that reducing the top-k is where the faster inference comes from', () => {
     const html = render(glm53Text, { scaleTopK: true })
     expect(html).toContain('Reducing the top-k')
     expect(html).not.toContain('Active parameters per token are unchanged')
@@ -160,7 +160,7 @@ describe('ReapResults in the idle and error states', () => {
         result: null,
         shapeState: idleState,
         gpu: RTX_5090,
-        computeError: 'Calibration samples must be a whole number of one or more.',
+        computeError: 'Calibration samples must be a whole number of 1 or more.',
       }),
     )
     // The idle branch wins while nothing has been entered, so no error shows.

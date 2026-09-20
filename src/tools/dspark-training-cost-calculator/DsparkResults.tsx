@@ -13,7 +13,7 @@ import type { DsparkShapeState } from './useDsparkShape'
 const VERDICT_LABEL: Record<DsparkVerdict, string> = {
   fits: 'Fits',
   'needs-offline': 'Needs offline capture',
-  'needs-more-gpus': 'Needs more cards',
+  'needs-more-gpus': 'Needs more GPUs',
   'needs-offload': 'Needs offloading',
 }
 
@@ -41,7 +41,7 @@ export default function DsparkResults({
     return (
       <Card>
         <CardContent className="text-muted-foreground py-10 text-center text-sm">
-          Enter a target model to estimate the cost of training a drafter against it.
+          Enter a target to estimate the cost of training a drafter against it.
         </CardContent>
       </Card>
     )
@@ -55,7 +55,7 @@ export default function DsparkResults({
           role="status"
         >
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          Reading the target config
+          Reading the config of the target
         </CardContent>
       </Card>
     )
@@ -65,7 +65,7 @@ export default function DsparkResults({
     return (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not read that target config</AlertTitle>
+        <AlertTitle>Could not read the target config</AlertTitle>
         <AlertDescription>
           <p>{shapeState.error}</p>
         </AlertDescription>
@@ -96,7 +96,9 @@ export default function DsparkResults({
       ? 'this target'
       : shape.modelType
   const boundLabel =
-    result.bound === 'compute' ? 'the GPU doing the arithmetic' : 'storage feeding the cache back'
+    result.bound === 'compute'
+      ? 'the GPU that does the arithmetic'
+      : 'the storage that feeds the target cache back'
   const cachePerToken = formatBytes(result.cacheBytesPerToken)
 
   return (
@@ -104,14 +106,13 @@ export default function DsparkResults({
       {shape.looksLikeDraftConfig && (
         <Alert className="border-amber-500/40 text-amber-700 dark:text-amber-400">
           <AlertTriangle />
-          <AlertTitle>This looks like a draft config, not a target</AlertTitle>
+          <AlertTitle>This config looks like a drafter checkpoint, not a target</AlertTitle>
           <AlertDescription>
             <p>
-              The config carries DSpark draft fields. Its{' '}
-              {formatExact(shape.numLayers)} blocks are the draft's depth, and the
-              target it was trained against is deeper, so every figure below that
-              depends on the depth is understated. Cost the target's own config
-              instead.
+              The config carries DSpark drafter fields. Its{' '}
+              {formatExact(shape.numLayers)} blocks are the depth of the drafter, and the target it
+              was trained against is deeper. Every estimate below that depends on the depth is
+              therefore too small. Cost the config of the target instead.
             </p>
           </AlertDescription>
         </Alert>
@@ -139,34 +140,33 @@ export default function DsparkResults({
           {/* A self contained answer, so it can be lifted on its own. */}
           <p className="text-sm">
             Training a DSpark drafter against {targetLabel} with{' '}
-            {formatExact(shape.numLayers)} blocks and{' '}
-            {formatExact(shape.hiddenSize)} hidden takes about{' '}
-            <strong>{formatDuration(result.estimateSeconds)}</strong> on {gpu.label}
+            {formatExact(shape.numLayers)} blocks and {formatExact(shape.hiddenSize)} hidden takes
+            about <strong>{formatDuration(result.estimateSeconds)}</strong> on {gpu.label}
             {Number(result.vramBytes) > 0 && result.verdict !== 'fits'
-              ? ` across ${result.gpusNeeded} card${result.gpusNeeded === 1 ? '' : 's'}`
+              ? ` across ${result.gpusNeeded} GPU${result.gpusNeeded === 1 ? '' : 's'}`
               : ''}
-            , and it is limited by {boundLabel}.
+            . The run is limited by {boundLabel}.
           </p>
 
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Tokens per epoch</dt>
+              <dt className="text-muted-foreground text-xs">Tokens for each epoch</dt>
               <dd className="tabular-nums">{formatExact(result.trainingTokens)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Compute alone</dt>
+              <dt className="text-muted-foreground text-xs">Arithmetic alone</dt>
               <dd className="tabular-nums">{formatDuration(result.computeSeconds)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Cache read alone</dt>
+              <dt className="text-muted-foreground text-xs">Target cache reads alone</dt>
               <dd className="tabular-nums">{formatDuration(result.cacheReadSeconds)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Draft parameters</dt>
+              <dt className="text-muted-foreground text-xs">Drafter parameters</dt>
               <dd className="tabular-nums">{formatExact(result.draftParams)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Anchors per sequence</dt>
+              <dt className="text-muted-foreground text-xs">Anchors for each sequence</dt>
               <dd className="tabular-nums">
                 {formatExact(result.numAnchors)}
                 {result.anchorsClamped ? ' (capped)' : ''}
@@ -177,7 +177,7 @@ export default function DsparkResults({
               <dd className="tabular-nums">{formatExact(shape.totalParams)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Overhead applied</dt>
+              <dt className="text-muted-foreground text-xs">Overhead factor</dt>
               <dd className="tabular-nums">{result.overheadFactor}x</dd>
             </div>
           </dl>
@@ -199,32 +199,31 @@ export default function DsparkResults({
                 <p className="text-sm font-medium">
                   {offline
                     ? `${formatBytes(result.cacheBytes).text} of target hidden states`
-                    : 'No cache, because the target is captured online'}
+                    : 'No target cache, because the run captures the target online'}
                 </p>
                 <p className="text-muted-foreground text-sm">
                   {offline ? (
                     <>
-                      Each token stores {cachePerToken.text}: {formatExact(shape.hiddenSize)} values
+                      One token stores {cachePerToken.text}: {formatExact(shape.hiddenSize)} values
                       from each of the {formatExact(result.numTargetLayers)} captured target layers
-                      in bf16, the last hidden state that the distribution and confidence losses
-                      both need, the token ids, and two masks. Over{' '}
-                      {formatExact(result.trainingTokens)} tokens that is{' '}
-                      {formatBytes(result.cacheBytes).text} written once, and read back once per
-                      epoch.
+                      in bf16. It also stores the last hidden state for the distribution and
+                      confidence losses. The token ids and 2 masks come after that. Over{' '}
+                      {formatExact(result.trainingTokens)} tokens, that is{' '}
+                      {formatBytes(result.cacheBytes).text}. The run writes it once and reads it back
+                      in each epoch.
                     </>
                   ) : (
                     <>
-                      Online capture keeps the target resident and writes nothing, so the run costs
-                      no storage at all. It costs {formatBytes(result.targetWeightBytes).text} of
-                      VRAM for the target weights instead, which is what the memory verdict below
-                      accounts for.
+                      Online capture keeps the target in VRAM and writes nothing. The run therefore
+                      needs no storage. It needs {formatBytes(result.targetWeightBytes).text} of
+                      VRAM for the target weights instead. The VRAM verdict below accounts for that.
                     </>
                   )}
                 </p>
                 {offline && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
-                    Capturing fewer target layers is the first lever if this does not fit your disk.
-                    The cache is close to proportional to the captured layer count.
+                    Capture fewer target layers if this does not fit your storage. The target cache
+                    is close to proportional to the captured layer count.
                   </p>
                 )}
               </div>
@@ -245,24 +244,26 @@ export default function DsparkResults({
                 <p className="text-sm font-medium">
                   {formatDuration(result.computeSeconds)} of arithmetic
                   {offline
-                    ? `, ${formatDuration(result.cacheReadSeconds)} of reading the cache back`
+                    ? ` and ${formatDuration(result.cacheReadSeconds)} of target cache reads`
                     : ''}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Training scores {formatExact(result.positionsPerEpoch)} positions per epoch
-                  against {formatExact(result.draftParams)} draft parameters, which is{' '}
-                  {result.trainingFlops.toExponential(2)} FLOPs, plus{' '}
-                  {result.contextFlops.toExponential(2)} for the context each block attends to
-                  {offline ? ` and ${result.cachePrepFlops.toExponential(2)} to build the cache` : ''}.
-                  The {result.overheadFactor}x overhead and setup land on top of the slower of the
-                  two.
+                  Training scores {formatExact(result.positionsPerEpoch)} positions in each epoch
+                  against {formatExact(result.draftParams)} drafter parameters. That is{' '}
+                  {result.trainingFlops.toExponential(2)} FLOPs. The context that each block attends
+                  to adds {result.contextFlops.toExponential(2)}.
+                  {offline
+                    ? ` Building the target cache adds ${result.cachePrepFlops.toExponential(2)}.`
+                    : ''}{' '}
+                  The {result.overheadFactor}x overhead and the setup apply on top of the slower
+                  value.
                 </p>
                 {result.anchorsClamped && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
-                    The anchor count was capped at {formatExact(result.numAnchors)} per sequence,
-                    one block per sequence token, because the requested count would score more
-                    positions than the sequence holds. Raise the sequence length or lower the
-                    anchor count to change this.
+                    The run capped the anchor count at {formatExact(result.numAnchors)} for each
+                    sequence, which is 1 block for each sequence token. The requested count would
+                    score more positions than the sequence holds. Raise the sequence length or lower
+                    the anchor count to change this.
                   </p>
                 )}
               </div>
@@ -285,40 +286,41 @@ export default function DsparkResults({
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
                   {formatBytes(result.peakVramBytes).text} peak against{' '}
-                  {formatBytes(result.vramBytes).text} on {gpu.label}
+                  {formatBytes(result.vramBytes).text} of VRAM on {gpu.label}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  The drafter and its optimizer state are {formatBytes(result.draftWeightBytes).text}{' '}
-                  and {formatBytes(result.optimizerBytes).text}, gradients are{' '}
-                  {formatBytes(result.gradientBytes).text}, and the activation buffer is{' '}
+                  The drafter and its optimizer state need{' '}
+                  {formatBytes(result.draftWeightBytes).text} and{' '}
+                  {formatBytes(result.optimizerBytes).text}. The gradients need{' '}
+                  {formatBytes(result.gradientBytes).text}. The activation buffer needs{' '}
                   {formatBytes(result.activationBytes).text}.
                   {offline
-                    ? ' Offline capture means the target is not resident while the drafter trains, which is what makes one card enough.'
-                    : ` Online capture keeps the ${formatBytes(result.targetWeightBytes).text} target resident for the whole run.`}
+                    ? ' Offline capture keeps the target out of VRAM while the drafter trains. That is why one GPU is enough.'
+                    : ` Online capture keeps the ${formatBytes(result.targetWeightBytes).text} target in VRAM for the whole run.`}
                 </p>
                 {result.verdict === 'needs-offline' && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
-                    Precomputing the cache drops the target from memory and makes this fit. It costs
-                    storage instead, which the cache section above sizes.
+                    Writing the target cache first removes the target from VRAM and makes this fit. It
+                    needs storage instead, which the target cache section above sizes.
                   </p>
                 )}
                 {result.verdict === 'needs-more-gpus' && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
-                    One card is not enough for the drafter and its state. Spread the run over{' '}
-                    {result.gpusNeeded} cards, or lower the micro batch to shrink the activation
-                    buffer.
+                    One GPU is not enough for the drafter and its state. Divide the run across{' '}
+                    {result.gpusNeeded} GPUs, or lower the micro batch to make the activation buffer
+                    smaller.
                   </p>
                 )}
                 {result.verdict === 'needs-offload' && (
                   <p className="text-sm text-rose-700 dark:text-rose-400">
-                    No reasonable number of cards holds this. Lower the micro batch, use fewer draft
-                    layers, or offload the optimizer state to host memory.
+                    No reasonable number of GPUs holds this. Lower the micro batch, use fewer draft
+                    layers, or move the optimizer state to host memory.
                   </p>
                 )}
                 {result.verdict === 'fits' && (
                   <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                    This run fits. The cache still needs {formatBytes(result.cacheBytes).text} of
-                    storage, and the target checkpoint needs its own space on top.
+                    This run fits. The target cache still needs {formatBytes(result.cacheBytes).text}{' '}
+                    of storage, and the target checkpoint needs its own space on top.
                   </p>
                 )}
               </div>
@@ -329,7 +331,7 @@ export default function DsparkResults({
 
       <section className="flex flex-col gap-3" aria-labelledby="dspark-draft-heading">
         <h2 id="dspark-draft-heading" className="text-lg font-medium tracking-tight">
-          What does the draft model cost?
+          What does the drafter cost?
         </h2>
         <Card>
           <CardContent className="flex flex-col gap-4">
@@ -342,18 +344,17 @@ export default function DsparkResults({
                   target
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  {formatExact(result.draftBackboneParams)} in the backbone,{' '}
-                  {formatExact(result.draftProjectionParams)} in the projection from the captured
-                  target layers, {formatExact(result.draftMarkovParams)} in the Markov head, and{' '}
-                  {formatExact(result.draftConfidenceParams)} in the confidence head. The embedding
-                  and the language model head are shared with the target and frozen, so they are
-                  never trained.
+                  The backbone holds {formatExact(result.draftBackboneParams)}. The projection from
+                  the captured target layers holds {formatExact(result.draftProjectionParams)}. The
+                  Markov head holds {formatExact(result.draftMarkovParams)}. The confidence head
+                  holds {formatExact(result.draftConfidenceParams)}. The embedding and the language
+                  model head are shared with the target and frozen. The run never trains them.
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  At inference the drafter proposes {formatExact(result.blockSize)} candidate tokens
-                  per step, which the frozen target verifies in a single parallel pass. The
-                  acceptance length you actually get depends on the data you trained on and on the
-                  verification schedule you deploy, neither of which this calculator measures.
+                  At inference time, the drafter proposes {formatExact(result.blockSize)} candidate
+                  tokens at each step. The frozen target verifies them in 1 parallel pass. The
+                  acceptance length depends on the training data and on the verification schedule you
+                  deploy. This calculator measures neither one.
                 </p>
               </div>
             </div>

@@ -27,12 +27,12 @@ function verdictClass(verdict: ReapVerdict): string {
 function verdictSentence(result: ReapResult): string {
   const memory = formatBytes(result.vramBytes).text
   if (result.verdict === 'fits') {
-    return `one expert block fits inside ${memory}`
+    return `One expert block fits in ${memory}.`
   }
   if (result.verdict === 'needs-fp8') {
-    return `one expert block only fits in FP8, at ${formatBytes(result.perMoELayerBytes / 2).text}`
+    return `One expert block fits only in FP8, at ${formatBytes(result.perMoELayerBytes / 2).text}.`
   }
-  return `one expert block does not fit in ${memory} even in the narrowest format`
+  return `One expert block does not fit in ${memory}, even at the narrowest weight precision.`
 }
 
 interface ReapResultsProps {
@@ -87,7 +87,8 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
         <AlertDescription>
           <p>
             REAP removes routed experts from a sparsely activated mixture of experts. This model has
-            no expert bank, so there is nothing to prune and no calibration run to cost out.
+            no expert bank. Therefore there is nothing to prune, and there is no calibration to
+            cost.
           </p>
         </AlertDescription>
       </Alert>
@@ -110,7 +111,7 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
 
   const shape = result.shape
   const boundLabel =
-    result.bound === 'compute' ? 'the GPU doing the arithmetic' : 'storage feeding the weights'
+    result.bound === 'compute' ? 'the GPU that does the arithmetic' : 'the storage that feeds the weights'
 
   return (
     <div className="flex flex-col gap-4" aria-live="polite">
@@ -137,10 +138,9 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
           <p className="text-sm">
             REAP on {shape.modelType} with{' '}
             {result.shape.numLayers.toLocaleString('en-US')} blocks and{' '}
-            {shape.routedExperts.toLocaleString('en-US')} experts per block takes about{' '}
-            <strong>{formatDuration(result.estimateSeconds)}</strong> on a {gpu.label} at the
-            calibration recipe you set, and {verdictSentence(result)}. The run is limited by{' '}
-            {boundLabel}.
+            {shape.routedExperts.toLocaleString('en-US')} experts in each block takes about{' '}
+            <strong>{formatDuration(result.estimateSeconds)}</strong> on a {gpu.label} at your
+            calibration recipe. {verdictSentence(result)} The run is limited by {boundLabel}.
           </p>
 
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
@@ -149,15 +149,15 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
               <dd className="tabular-nums">{formatExact(result.tokens)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Compute alone</dt>
+              <dt className="text-muted-foreground text-xs">Arithmetic alone</dt>
               <dd className="tabular-nums">{formatDuration(result.computeSeconds)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Streaming alone</dt>
+              <dt className="text-muted-foreground text-xs">Storage reads alone</dt>
               <dd className="tabular-nums">{formatDuration(result.streamSeconds)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Parameters touched</dt>
+              <dt className="text-muted-foreground text-xs">Parameters per token</dt>
               <dd className="tabular-nums">{formatExact(shape.activeParamsPerToken)}</dd>
             </div>
             <div className="flex flex-col">
@@ -165,7 +165,7 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
               <dd className="tabular-nums">{formatExact(shape.totalParams)}</dd>
             </div>
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Overhead applied</dt>
+              <dt className="text-muted-foreground text-xs">Overhead factor</dt>
               <dd className="tabular-nums">{result.overheadFactor}x</dd>
             </div>
           </dl>
@@ -188,25 +188,25 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
                   One expert block is {formatBytes(result.perMoELayerBytes).text}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Your card has {formatBytes(result.vramBytes).text}. The observer holds one decoder
-                  block plus a {formatBytes(result.activationBytes).text} activation buffer, so the
-                  peak is {formatBytes(result.peakVramBytes).text}.
+                  Your GPU has {formatBytes(result.vramBytes).text} of VRAM. The observer holds 1
+                  expert block plus a {formatBytes(result.activationBytes).text} activation buffer.
+                  The peak is therefore {formatBytes(result.peakVramBytes).text}.
                 </p>
                 {result.verdict === 'needs-fp8' && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
-                    Switching the weight precision to FP8 brings the block down to{' '}
-                    {formatBytes(result.perMoELayerBytes / 2).text} and makes the run possible.
+                    Change the weight precision to FP8. The expert block then needs{' '}
+                    {formatBytes(result.perMoELayerBytes / 2).text}, and the run becomes possible.
                   </p>
                 )}
                 {result.verdict === 'needs-offload' && (
                   <p className="text-sm text-rose-700 dark:text-rose-400">
-                    No weight format makes this block fit. Lower the micro batch, use a card with
-                    more memory, or shard the calibration across cards.
+                    No weight precision makes this expert block fit. Lower the micro batch, use a GPU
+                    with more VRAM, or divide the calibration across several GPUs.
                   </p>
                 )}
                 {result.verdict === 'fits' && (
                   <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                    This run fits. The full weight set still needs{' '}
+                    This run fits. The full set of weights still needs{' '}
                     {formatBytes(result.weightBytes).text} of storage or host memory.
                   </p>
                 )}
@@ -218,7 +218,7 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
 
       <section className="flex flex-col gap-3" aria-labelledby="reap-time-heading">
         <h2 id="reap-time-heading" className="text-lg font-medium tracking-tight">
-          How long would it take to REAP?
+          How long does a REAP run take?
         </h2>
         <Card>
           <CardContent className="flex flex-col gap-4">
@@ -229,16 +229,16 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
               />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
-                  {formatDuration(result.computeSeconds)} of arithmetic, {formatDuration(result.streamSeconds)}{' '}
-                  of streaming
+                  {formatDuration(result.computeSeconds)} of arithmetic and{' '}
+                  {formatDuration(result.streamSeconds)} of storage reads
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  The calibration pass touches {formatExact(result.tokens)} tokens. At{' '}
-                  {(result.shape.expertsPerToken)} of {shape.routedExperts.toLocaleString('en-US')}{' '}
-                  experts per token, that is {formatExact(shape.activeParamsPerToken)} parameters per
-                  token, or {result.flops.toExponential(2)} FLOPs in total. The slower of the two
-                  figures sets the run, and the {result.overheadFactor}x overhead and setup land on
-                  top.
+                  The calibration touches {formatExact(result.tokens)} tokens. Each token goes to{' '}
+                  {result.shape.expertsPerToken} of {shape.routedExperts.toLocaleString('en-US')}{' '}
+                  experts, so 1 token touches {formatExact(shape.activeParamsPerToken)} parameters.
+                  The whole calibration needs {result.flops.toExponential(2)} FLOPs. The slower of the
+                  2 values sets the duration. The {result.overheadFactor}x overhead and the setup
+                  then apply.
                 </p>
               </div>
             </div>
@@ -259,18 +259,19 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
               />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
-                  {formatExact(result.keptExperts)} of {formatExact(shape.routedExperts)} experts kept,
-                  a {result.reductionPercent.toFixed(1)} percent smaller model
+                  The run keeps {formatExact(result.keptExperts)} of{' '}
+                  {formatExact(shape.routedExperts)} experts. The model is{' '}
+                  {result.reductionPercent.toFixed(1)} percent smaller.
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Expert parameters drop from {formatBytes(shape.routedExpertParams * 2).text} to{' '}
-                  {formatBytes(result.expertParamsAfter * 2).text} in BF16. Total parameters fall from{' '}
-                  {formatExact(shape.totalParams)} to {formatExact(result.totalParamsAfter)}.
+                  The expert parameters fall from {formatBytes(shape.routedExpertParams * 2).text} to{' '}
+                  {formatBytes(result.expertParamsAfter * 2).text} in BF16. The total parameters fall
+                  from {formatExact(shape.totalParams)} to {formatExact(result.totalParamsAfter)}.
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-400">
                   {result.activeParamsPerTokenAfter === shape.activeParamsPerToken
-                    ? 'Active parameters per token are unchanged, because a token still routes to the same number of experts. REAP buys memory, not speed, unless you also reduce the router top-k.'
-                    : `Reducing the top-k to ${result.expertsPerTokenAfter} also cuts active parameters to ${formatExact(result.activeParamsPerTokenAfter)}, which is where the speedup comes from.`}
+                    ? 'Active parameters per token are unchanged, because a token still goes to the same number of experts. REAP saves VRAM, but not time, unless the run also reduces the router top-k.'
+                    : `Reducing the top-k to ${result.expertsPerTokenAfter} also cuts the active parameters to ${formatExact(result.activeParamsPerTokenAfter)}. That change is the source of the faster inference.`}
                 </p>
               </div>
             </div>

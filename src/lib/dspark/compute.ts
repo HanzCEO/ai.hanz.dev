@@ -25,35 +25,35 @@ const GIB = 1024 ** 3
 /** The scale a value has to reach to be a cost worth reporting. */
 function requirePositive(value: number, field: DsparkInputField, label: string): void {
   if (!Number.isFinite(value) || value < 1) {
-    throw new DsparkInputError(`${label} must be a whole number of one or more.`, field)
+    throw new DsparkInputError(`${label} must be a whole number of 1 or more.`, field)
   }
 }
 
 function validate(inputs: DsparkInputs): void {
   requirePositive(inputs.trainingTokens, 'trainingTokens', 'Training tokens')
   requirePositive(inputs.epochs, 'epochs', 'Epochs')
-  requirePositive(inputs.numAnchors, 'numAnchors', 'Anchors per sequence')
+  requirePositive(inputs.numAnchors, 'numAnchors', 'Anchors for each sequence')
   requirePositive(inputs.blockSize, 'blockSize', 'Block size')
   requirePositive(inputs.numDraftLayers, 'numDraftLayers', 'Draft layers')
   requirePositive(inputs.numTargetLayers, 'numTargetLayers', 'Captured target layers')
   requirePositive(inputs.sequenceLength, 'sequenceLength', 'Sequence length')
-  requirePositive(inputs.gpuCount, 'gpuCount', 'GPUs')
+  requirePositive(inputs.gpuCount, 'gpuCount', 'GPU count')
   requirePositive(inputs.microBatchSize, 'microBatchSize', 'Micro batch size')
 
   if (!Number.isFinite(inputs.markovRank) || inputs.markovRank < 0) {
     throw new DsparkInputError(
-      'Markov rank must be zero or more. Zero disables the sequential head.',
+      'Markov rank must be 0 or more. A rank of 0 disables the sequential head.',
       'markovRank',
     )
   }
   if (!Number.isFinite(inputs.mfu) || inputs.mfu <= 0 || inputs.mfu > 1) {
     throw new DsparkInputError(
-      'Model flops utilisation must be above zero and at most one.',
+      'Model flops utilisation must be more than 0 and at most 1.',
       'mfu',
     )
   }
   if (!Number.isFinite(inputs.overheadFactor) || inputs.overheadFactor < 1) {
-    throw new DsparkInputError('Overhead must be at least one.', 'overheadFactor')
+    throw new DsparkInputError('Overhead must be at least 1.', 'overheadFactor')
   }
 }
 
@@ -205,44 +205,44 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
 
   const steps = [
     {
-      label: 'Cache width per token',
-      detail: `${inputs.numTargetLayers} captured layers of ${formatExact(hiddenSize)} values in bf16 is ${formatExact(inputs.numTargetLayers * hiddenSize * BF16_BYTES)} bytes, plus ${formatExact(hiddenSize * BF16_BYTES)} for the last hidden state the distribution loss needs, plus the token ids and the two masks. That is ${formatExact(cacheBytesPerToken)} bytes per token.`,
+      label: 'Target cache width',
+      detail: `The target cache stores ${inputs.numTargetLayers} captured layers of ${formatExact(hiddenSize)} values in bf16. That is ${formatExact(inputs.numTargetLayers * hiddenSize * BF16_BYTES)} bytes. The last hidden state for the distribution loss adds ${formatExact(hiddenSize * BF16_BYTES)} bytes. The token ids and the 2 masks add the rest. One token therefore needs ${formatExact(cacheBytesPerToken)} bytes.`,
     },
     {
       label: offline ? 'Target cache' : 'No target cache',
       detail: offline
-        ? `${formatExact(cacheBytesPerToken)} bytes per token times ${tokensPerEpoch} tokens is ${formatBytes(cacheBytes).text}. This is written once and read back every epoch.`
-        : 'Online capture keeps the target resident and writes nothing, so the run costs no storage. It costs the target model in VRAM instead.',
+        ? `One token needs ${formatExact(cacheBytesPerToken)} bytes, so ${tokensPerEpoch} tokens need ${formatBytes(cacheBytes).text}. The run writes this cache once and reads it back in each epoch.`
+        : 'Online capture keeps the target in VRAM and writes nothing. The run therefore needs no storage. It needs the target in VRAM instead.',
     },
     {
-      label: 'Draft parameters',
-      detail: `${inputs.numDraftLayers} blocks of backbone is ${formatExact(draftBackboneParams)} parameters, the projection from the captured layers is ${formatExact(draftProjectionParams)}, the rank ${inputs.markovRank} Markov head is ${formatExact(draftMarkovParams)}, and the confidence head is ${formatExact(draftConfidenceParams)}. The embedding and the language model head are shared with the target and frozen, so they are not trained.`,
+      label: 'Drafter parameters',
+      detail: `The ${inputs.numDraftLayers} backbone blocks hold ${formatExact(draftBackboneParams)} parameters. The projection from the captured layers holds ${formatExact(draftProjectionParams)}. The Markov head at rank ${inputs.markovRank} holds ${formatExact(draftMarkovParams)}. The confidence head holds ${formatExact(draftConfidenceParams)}. The embedding and the language model head are shared with the target and frozen. The run therefore does not train them.`,
     },
     {
       label: 'Positions scored',
-      detail: `${tokensPerEpoch} tokens at ${formatExact(inputs.sequenceLength)} per sequence is ${formatExact(sequencesPerEpoch)} sequences. Each contributes ${formatExact(numAnchors)} anchors of ${inputs.blockSize} tokens, so one epoch scores ${formatExact(positionsPerEpoch)} positions, and ${inputs.epochs} epochs score ${formatExact(positionsPerEpoch * inputs.epochs)}.${anchorsClamped ? ` The requested ${formatExact(inputs.numAnchors)} anchors were reduced to ${formatExact(numAnchors)}, which is one block per sequence token, because a ${formatExact(inputs.sequenceLength)} token sequence cannot hold more.` : ''}`,
+      detail: `The training set holds ${tokensPerEpoch} tokens at ${formatExact(inputs.sequenceLength)} tokens for each sequence. That is ${formatExact(sequencesPerEpoch)} sequences. Each sequence contributes ${formatExact(numAnchors)} anchors of ${inputs.blockSize} tokens. One epoch therefore scores ${formatExact(positionsPerEpoch)} positions, and ${inputs.epochs} epochs score ${formatExact(positionsPerEpoch * inputs.epochs)}.${anchorsClamped ? ` The requested ${formatExact(inputs.numAnchors)} anchors were reduced to ${formatExact(numAnchors)}, because a ${formatExact(inputs.sequenceLength)} token sequence cannot hold more. One block for each sequence token is the maximum.` : ''}`,
     },
     {
       label: 'Arithmetic',
-      detail: `Six flops per parameter per position is ${trainingFlops.toExponential(3)}, the context each block attends to adds ${contextFlops.toExponential(3)}, and preparing the cache adds ${cachePrepFlops.toExponential(3)}. Together, ${totalFlops.toExponential(3)} FLOPs.`,
+      detail: `6 FLOPs for each parameter and each position gives ${trainingFlops.toExponential(3)}. The context that each block attends to adds ${contextFlops.toExponential(3)}. Preparing the target cache adds ${cachePrepFlops.toExponential(3)}. The total is ${totalFlops.toExponential(3)} FLOPs.`,
     },
     {
-      label: 'Compute time',
-      detail: `${inputs.gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense on ${inputs.gpu.label}, times ${inputs.gpuCount} card${inputs.gpuCount === 1 ? '' : 's'}, at ${(inputs.mfu * 100).toFixed(0)} percent utilisation, is ${(computeSeconds / 3600).toFixed(2)} hours.`,
+      label: 'Arithmetic duration',
+      detail: `One ${inputs.gpu.label} reaches ${inputs.gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense. With ${inputs.gpuCount} GPU at ${(inputs.mfu * 100).toFixed(0)} percent utilisation, the arithmetic takes ${(computeSeconds / 3600).toFixed(2)} hours.`,
     },
     {
-      label: 'Cache read time',
+      label: 'Target cache reads',
       detail: offline
-        ? `${formatBytes(cacheBytes).text} read back ${inputs.epochs} times at ${inputs.storage.bandwidthGBs} GB/s is ${(cacheReadSeconds / 3600).toFixed(2)} hours.`
-        : 'Online capture reads nothing back, so there is no stream cost and the run is bound by compute.',
+        ? `The run reads ${formatBytes(cacheBytes).text} back ${inputs.epochs} times from storage at ${inputs.storage.bandwidthGBs} GB/s. That takes ${(cacheReadSeconds / 3600).toFixed(2)} hours.`
+        : 'Online capture reads nothing back. The run therefore has no read cost, and the arithmetic sets the bound.',
     },
     {
       label: 'Estimate',
-      detail: `The slower of the two is the ${bound === 'compute' ? 'compute' : 'cache read'} bound, so ${(estimateSeconds / 3600).toFixed(2)} hours after the ${inputs.overheadFactor} times overhead and ${(inputs.setupSeconds / 60).toFixed(0)} minutes of setup.`,
+      detail: `The slower value sets the bound, and that bound is ${bound === 'compute' ? 'the arithmetic' : 'the cache read'}. The estimate is ${(estimateSeconds / 3600).toFixed(2)} hours, after ${inputs.overheadFactor} times overhead and ${(inputs.setupSeconds / 60).toFixed(0)} minutes of setup.`,
     },
     {
-      label: 'Memory',
-      detail: `${formatBytes(draftWeightBytes).text} of bf16 weights, ${formatBytes(optimizerBytes).text} of optimizer state, ${formatBytes(gradientBytes).text} of gradients, a ${formatBytes(activationBytes).text} activation buffer, and ${formatBytes(RUNTIME_OVERHEAD_BYTES).text} of framework reserve${offline ? '' : `, plus ${formatBytes(targetWeightBytes).text} for the resident target`}. That is ${formatBytes(peakVramBytes).text} against ${formatBytes(vramBytes).text} on the card.`,
+      label: 'VRAM',
+      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16. The optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}. The activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text}.`} The peak is therefore ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM on the GPU.`,
     },
   ]
 
@@ -257,36 +257,36 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
       value: shape.attentionParamsPerLayer,
       source: 'derived from the attention layout',
     },
-    { key: 'total_target_params', value: shape.totalParams, source: 'sum over every block, including embeddings' },
+    { key: 'total_target_params', value: shape.totalParams, source: 'the sum over every block, including the embeddings' },
     {
       key: 'active_target_params_per_token',
       value: shape.activeParamsPerToken,
-      source: 'the target parameters one token touches, which set the cache prep cost',
+      source: 'the target parameters that one token touches. These set the cost to prepare the target cache.',
     },
-    { key: 'num_target_layers', value: inputs.numTargetLayers, source: 'recipe: captured layers' },
-    { key: 'num_draft_layers', value: inputs.numDraftLayers, source: 'recipe: draft backbone depth' },
+    { key: 'num_target_layers', value: inputs.numTargetLayers, source: 'recipe: the captured layers' },
+    { key: 'num_draft_layers', value: inputs.numDraftLayers, source: 'recipe: the depth of the drafter backbone' },
     { key: 'block_size', value: inputs.blockSize, source: 'recipe: gamma, the drafted block' },
-    { key: 'num_anchors', value: numAnchors, source: 'recipe: blocks sampled per sequence' },
-    { key: 'markov_rank', value: inputs.markovRank, source: 'recipe: rank of the sequential head' },
-    { key: 'training_tokens', value: inputs.trainingTokens, source: 'one pass over the training set' },
-    { key: 'epochs', value: inputs.epochs, source: 'passes over the training set' },
-    { key: 'draft_params', value: draftParams, source: 'the trained drafter, excluding the frozen shared embedding and head' },
+    { key: 'num_anchors', value: numAnchors, source: 'recipe: the blocks sampled from each sequence' },
+    { key: 'markov_rank', value: inputs.markovRank, source: 'recipe: the rank of the sequential head' },
+    { key: 'training_tokens', value: inputs.trainingTokens, source: '1 pass over the training set' },
+    { key: 'epochs', value: inputs.epochs, source: 'the number of passes over the training set' },
+    { key: 'draft_params', value: draftParams, source: 'the trained drafter, without the frozen shared embedding and head' },
   ]
 
   const assumptions = [
-    'The drafter shares and freezes the target embedding and language model head, so neither is trained and neither appears in the draft parameter count. This is what the paper and both published implementations do.',
-    'Each draft block attends to the target context before its anchor and to itself bidirectionally, so the context term scales with the sequence length. It is a smaller term than the block arithmetic at every setting the presets cover.',
-    'Every position in a block is trained in one parallel pass, so the arithmetic is six flops per draft parameter per position rather than the sequence length. This is why a drafter over a billion tokens is affordable at all.',
-    'The target cache stores bf16 hidden states, int32 token ids and uint8 masks, matching the layout DeepSpec writes. Storing fewer captured layers reduces the cache in proportion, and is the first lever when the disk is too small.',
-    'Cache preparation is one forward pass of the target over the whole training set, so its cost scales with the target rather than the draft. It is included because on a large target it is not negligible.',
-    'The optimizer state is two fp32 Adam moments, eight bytes per parameter. The bf16 weights and the gradients are counted separately, so the total is twelve bytes per parameter plus activations.',
-    'The activation buffer is an estimate of the live intermediates in the draft forward pass, not a measured figure. Lower the micro batch if the real run runs out of memory.',
-    'Model flops utilisation absorbs kernel efficiency. A shallow drafter over short blocks reaches a lower fraction of peak than a large model does, so a third is optimistic and the estimate is the figure to trust.',
-    'The overhead factor covers the data loader, the cache reader, the checkpoint writer, and the scheduler, none of which appear in the FLOPs figure.',
+    'The drafter shares the target embedding and language model head, and the run freezes both. The run does not train either one, and neither appears in the drafter parameter count. The paper and both published implementations do this.',
+    'Each drafter block attends to the target context before its anchor, and to itself in both directions. The context term therefore scales with the sequence length. That term is smaller than the block arithmetic at every setting in the recipes.',
+    'The run trains every position in a block in 1 parallel pass. The arithmetic is therefore 6 FLOPs for each drafter parameter and each position. It does not depend on the sequence length. This is why a drafter over a billion tokens is affordable.',
+    'The target cache stores bf16 hidden states, int32 token ids, and uint8 masks. This matches the layout that DeepSpec writes. Fewer captured layers make the target cache smaller in proportion. That is the first control when the storage is too small.',
+    'Target cache preparation is 1 forward pass of the target over the whole training set. Its cost therefore scales with the target and not with the drafter. The estimate includes it, because it is large for a large target.',
+    'The optimizer state is 2 fp32 Adam moments, or 8 bytes for each parameter. The calculator counts the bf16 weights and the gradients separately. The total is therefore 12 bytes for each parameter, plus the activations.',
+    'The activation buffer is an estimate of the live intermediates in the drafter forward pass. It is not a measured value. Lower the micro batch if the real run runs out of VRAM.',
+    'Model flops utilisation covers the kernel efficiency. A shallow drafter over short blocks reaches a smaller share of the peak than a large model does. One third is therefore optimistic. Trust the estimate and not the raw FLOPs.',
+    'The overhead factor covers the data loader, the cache reader, the checkpoint writer, and the scheduler. None of these appear in the FLOPs.',
     anchorsClamped
-      ? `The anchor count was capped at ${formatExact(numAnchors)} per sequence, one block per sequence token, because the requested ${formatExact(inputs.numAnchors)} would score more positions than a ${formatExact(inputs.sequenceLength)} token sequence holds. Raise the sequence length or lower the anchor count to change this.`
-      : 'The anchor count fits the sequence length, so every requested block is scored.',
-    'The confidence head is trained jointly with the draft. Serving its output well needs post-hoc calibration on held-out data, which is not part of this estimate.',
+      ? `The run caps the anchor count at ${formatExact(numAnchors)} for each sequence, which is 1 block for each sequence token. The requested ${formatExact(inputs.numAnchors)} anchors would score more positions than a ${formatExact(inputs.sequenceLength)} token sequence holds. Raise the sequence length or lower the anchor count to change this.`
+      : 'The anchor count fits the sequence length. The run therefore scores every requested block.',
+    'The run trains the confidence head together with the drafter. Good output at serving time needs post-hoc scaling on held-out data. That work is not part of this estimate.',
     ...shape.notes,
   ]
 

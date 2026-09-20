@@ -42,7 +42,7 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
   const intermediateSize = readNumber(inner, 'intermediate_size') ?? 4 * hiddenSize
   if (readNumber(inner, 'intermediate_size') === undefined) {
     notes.push(
-      `The config has no intermediate_size, so four times the hidden width of ${hiddenSize.toLocaleString('en-US')} is assumed for the feed forward block.`,
+      `The config has no intermediate_size. The calculator therefore assumes four times the hidden width of ${hiddenSize.toLocaleString('en-US')} for the feed forward block.`,
     )
   }
 
@@ -62,7 +62,7 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
   const tiedEmbeddings = readBoolean(inner, 'tie_word_embeddings') === true
   if (!tiedEmbeddings && readBoolean(inner, 'tie_word_embeddings') === undefined) {
     notes.push(
-      'The config does not say whether the embedding and the language model head are tied, so they are counted separately. A tied model would be one embedding table smaller.',
+      'The config does not say whether the embedding and the language model head are tied. The calculator therefore counts them separately. A tied model would be one embedding table smaller.',
     )
   }
 
@@ -77,7 +77,7 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
     declaredTargetLayers !== undefined || declaredTargetLayerIds !== undefined
   if (looksLikeDraftConfig) {
     notes.push(
-      `This config carries DSpark draft fields${declaredTargetLayers !== undefined ? `, including num_target_layers ${declaredTargetLayers}` : ''}. If it is a draft checkpoint rather than the target, then num_hidden_layers of ${numLayers.toLocaleString('en-US')} is the draft's depth and the target is deeper. Cost the target's own config instead.`,
+      `This config carries DSpark drafter fields${declaredTargetLayers !== undefined ? `, including num_target_layers ${declaredTargetLayers}` : ''}. A drafter checkpoint is not the target. If this config is a drafter checkpoint, then num_hidden_layers of ${numLayers.toLocaleString('en-US')} is the depth of the drafter. The target is deeper. Cost the config of the target instead.`,
     )
   }
 
