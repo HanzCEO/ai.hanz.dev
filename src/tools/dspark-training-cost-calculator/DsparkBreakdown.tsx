@@ -56,19 +56,26 @@ export default function DsparkBreakdown({ result }: { result: DsparkResult }) {
               ['Drafter weights in bf16', formatBytes(result.draftWeightBytes).text],
               ['Optimizer state', formatBytes(result.optimizerBytes).text],
               ['Gradients', formatBytes(result.gradientBytes).text],
-              ['Activation buffer', formatBytes(result.activationBytes).text],
               [
                 'Resident target',
                 offline ? 'not in VRAM' : formatBytes(result.targetWeightBytes).text,
               ],
-              ['Framework and kernels', formatBytes(result.runtimeReserveBytes).text],
-              ['Peak resident', formatBytes(result.peakVramBytes).text],
+              ['Model state over the whole run', formatBytes(result.modelStateBytes).text],
+              [
+                result.gpuCount > 1
+                  ? `Model state on each of the ${result.gpuCount} cards`
+                  : 'Model state on the card',
+                formatBytes(result.perCardStateBytes).text,
+              ],
+              ['Activation buffer for each card', formatBytes(result.activationBytes).text],
+              ['Framework and kernels for each card', formatBytes(result.runtimeReserveBytes).text],
+              ['Peak resident on each card', formatBytes(result.peakVramBytes).text],
               ['GPU VRAM', formatBytes(result.vramBytes).text],
             ]}
             note={
               offline
-                ? 'The target ran once, while the run built the target cache. The target is not in VRAM during training. That is why the peak is low enough for one GPU.'
-                : 'Online capture keeps the target in VRAM for the whole run, so its weights are part of the peak. Offline capture removes that line.'
+                ? 'The target ran once, while the run built the target cache. The target is not in VRAM during training, so the drafter and its state set the peak. The weights, the optimizer state and the gradients divide across the card count. The activation buffer and the framework reserve are held on every card and do not divide.'
+                : 'Online capture keeps the target in VRAM for the whole run, so its weights are part of the model state. Offline capture removes that line. The model state divides across the card count, while the activation buffer and the framework reserve are held on every card.'
             }
           />
         </>

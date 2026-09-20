@@ -388,7 +388,7 @@ export default function DsparkForm({
         <NumberField
           id="dspark-gpu-count"
           label="GPU count"
-          hint="The run divides across these GPUs. The reference configurations assume 1 node of 8."
+          hint="The run divides across these GPUs, and so does the model state it holds. The reference configurations assume 1 node of 8."
           min={1}
           value={inputs.gpuCount}
           onChange={(gpuCount) => update({ gpuCount })}
@@ -453,7 +453,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-micro-batch"
             label="Micro batch"
-            hint="The sequences in flight at once."
+            hint="The sequences in flight on each card."
             min={1}
             value={inputs.microBatchSize}
             onChange={(microBatchSize) => update({ microBatchSize })}

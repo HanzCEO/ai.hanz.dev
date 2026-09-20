@@ -345,7 +345,9 @@ describe('offline against online', () => {
     expect(offline.targetWeightBytes).toBe(0)
     // Qwen3-4B in bf16 is about 7.5 GiB of weights.
     expect(online.targetWeightBytes).toBe(QWEN.totalParams * 2)
-    expect(online.peakVramBytes - offline.peakVramBytes).toBe(online.targetWeightBytes)
+    // The target is the whole of the difference in model state. The peak that
+    // one card holds divides that state, so it is the state that is compared.
+    expect(online.modelStateBytes - offline.modelStateBytes).toBe(online.targetWeightBytes)
   })
 })
 
@@ -353,9 +355,10 @@ describe('the memory verdict', () => {
   const hostRam = findStorage('pcie5-host-ram') as StorageSpec
 
   function verdictFor(gpuId: string, mode: 'offline' | 'online'): DsparkVerdict {
+    // One card, because the verdict is about what a single card can hold.
     return estimateDspark(
       QWEN,
-      inputs({ gpu: findGpu(gpuId) as GpuSpec, dataMode: mode, storage: hostRam }),
+      inputs({ gpu: findGpu(gpuId) as GpuSpec, dataMode: mode, storage: hostRam, gpuCount: 1 }),
     ).verdict
   }
 
@@ -380,13 +383,20 @@ describe('the memory verdict', () => {
     expect(verdictFor('rtx-5090', 'offline')).toBe('fits')
   })
 
-  it('says how many cards the peak needs', () => {
+  it('says how many cards the model state needs', () => {
     const result = estimateDspark(
       QWEN,
-      inputs({ gpu: findGpu('rtx-4060') as GpuSpec, storage: hostRam }),
+      inputs({ gpu: findGpu('rtx-4060') as GpuSpec, storage: hostRam, gpuCount: 1 }),
     )
-    expect(result.gpusNeeded).toBe(2)
-    expect(result.gpusNeeded * result.vramBytes).toBeGreaterThanOrEqual(result.peakVramBytes)
+    const needed = result.gpusNeeded
+    expect(needed).not.toBeNull()
+    expect(needed).toBe(2)
+    // At that count the share of the model state fits beside the per-card terms.
+    const peakFor = (cards: number) =>
+      result.modelStateBytes / cards + result.activationBytes + result.runtimeReserveBytes
+    expect(peakFor(needed as number)).toBeLessThanOrEqual(result.vramBytes)
+    // One card fewer does not.
+    expect(peakFor((needed as number) - 1)).toBeGreaterThan(result.vramBytes)
   })
 
   it('shrinks the memory with a smaller micro batch', () => {
@@ -394,6 +404,55 @@ describe('the memory verdict', () => {
     const four = estimateDspark(QWEN, inputs({ microBatchSize: 4, storage: hostRam }))
     expect(four.activationBytes).toBe(one.activationBytes * 4)
     expect(four.peakVramBytes).toBeGreaterThan(one.peakVramBytes)
+  })
+})
+
+/**
+ * The card count has to reach the memory verdict, not only the duration. A run
+ * that is spread over enough cards fits even when one card does not, and the
+ * sentence the panel prints has to name the count the run actually uses.
+ */
+describe('the card count', () => {
+  const hostRam = findStorage('pcie5-host-ram') as StorageSpec
+  const small = findGpu('rtx-4060') as GpuSpec
+
+  it('divides the model state and leaves the per card terms alone', () => {
+    const one = estimateDspark(QWEN, inputs({ gpuCount: 1, storage: hostRam }))
+    const four = estimateDspark(QWEN, inputs({ gpuCount: 4, storage: hostRam }))
+    expect(four.modelStateBytes).toBe(one.modelStateBytes)
+    expect(four.perCardStateBytes).toBeCloseTo(one.perCardStateBytes / 4, 6)
+    // The activation buffer is held on every card, so it does not divide.
+    expect(four.activationBytes).toBe(one.activationBytes)
+    expect(four.peakVramBytes).toBeLessThan(one.peakVramBytes)
+  })
+
+  it('fits on enough cards when one card is not enough', () => {
+    const one = estimateDspark(QWEN, inputs({ gpu: small, gpuCount: 1, storage: hostRam }))
+    const four = estimateDspark(QWEN, inputs({ gpu: small, gpuCount: 4, storage: hostRam }))
+    expect(one.verdict).toBe('needs-more-gpus')
+    expect(four.verdict).toBe('fits')
+    // The count the state needs does not depend on how many cards were entered.
+    expect(four.gpusNeeded).toBe(one.gpusNeeded)
+  })
+
+  it('reports no card count when the per card terms already overflow', () => {
+    // A micro batch large enough that the activation buffer alone exceeds the
+    // card, which is the one case no card count can fix.
+    const result = estimateDspark(
+      QWEN,
+      inputs({ gpu: small, microBatchSize: 200, storage: hostRam }),
+    )
+    expect(result.gpusNeeded).toBeNull()
+    expect(result.verdict).toBe('needs-offload')
+  })
+
+  it('names the card count in the arithmetic step', () => {
+    const detailFor = (gpuCount: number) =>
+      estimateDspark(QWEN, inputs({ gpuCount, storage: hostRam })).steps.find(
+        (step) => step.label === 'Arithmetic duration',
+      )?.detail ?? ''
+    expect(detailFor(1)).toContain('With 1 GPU at')
+    expect(detailFor(8)).toContain('With 8 GPUs at')
   })
 })
 
@@ -620,14 +679,16 @@ describe('validation', () => {
 describe('the reported figures stay coherent', () => {
   const result = estimateDspark(QWEN, inputs())
 
-  it('adds the memory terms up to the peak', () => {
-    expect(result.peakVramBytes).toBe(
+  it('adds the memory terms up to the peak one card holds', () => {
+    expect(result.modelStateBytes).toBe(
       result.draftWeightBytes +
         result.optimizerBytes +
         result.gradientBytes +
-        result.activationBytes +
-        result.targetWeightBytes +
-        result.runtimeReserveBytes,
+        result.targetWeightBytes,
+    )
+    expect(result.perCardStateBytes).toBe(result.modelStateBytes / result.gpuCount)
+    expect(result.peakVramBytes).toBe(
+      result.perCardStateBytes + result.activationBytes + result.runtimeReserveBytes,
     )
   })
 

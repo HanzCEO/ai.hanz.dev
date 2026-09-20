@@ -175,25 +175,39 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
   // means it ran once, during cache preparation, and is gone by training time.
   const targetWeightBytes = offline ? 0 : shape.totalParams * BF16_BYTES
 
-  const peakVramBytes =
-    draftWeightBytes +
-    optimizerBytes +
-    gradientBytes +
-    activationBytes +
-    targetWeightBytes +
-    RUNTIME_OVERHEAD_BYTES
+  // The weights, the optimizer state, the gradients and the resident target are
+  // model state. A run spread over several cards holds a slice of each rather
+  // than a copy, which is what ZeRO and FSDP arrange, so these terms divide by
+  // the card count. The activation buffer and the framework reserve are held in
+  // full on every card and do not divide.
+  const draftStateBytes = draftWeightBytes + optimizerBytes + gradientBytes
+  const modelStateBytes = draftStateBytes + targetWeightBytes
+  const perCardBytes = activationBytes + RUNTIME_OVERHEAD_BYTES
+  const gpuCount = inputs.gpuCount
 
-  // The same peak with the target dropped, which is what the offline mode costs.
-  const offlinePeakBytes = peakVramBytes - targetWeightBytes
-  const gpusNeeded = Math.max(1, Math.ceil(peakVramBytes / vramBytes))
+  const peakForCards = (cards: number) => modelStateBytes / Math.max(1, cards) + perCardBytes
+
+  /** The peak one card holds, which is the figure the VRAM verdict compares. */
+  const peakVramBytes = peakForCards(gpuCount)
+
+  // The smallest card count whose slice of the model state fits beside the
+  // per-card terms. Null when those terms alone already exceed the card, which
+  // no card count can fix.
+  const gpusNeeded =
+    perCardBytes >= vramBytes
+      ? null
+      : Math.max(1, Math.ceil(modelStateBytes / (vramBytes - perCardBytes)))
+
+  // The same peak with the target dropped, which is what offline capture costs.
+  const offlinePeakBytes = draftStateBytes / gpuCount + perCardBytes
 
   let verdict: DsparkVerdict
   if (peakVramBytes <= vramBytes) {
     verdict = 'fits'
   } else if (!offline && offlinePeakBytes <= vramBytes) {
-    // The drafter itself fits; it is the resident target that does not.
+    // The drafter itself fits on these cards; the resident target does not.
     verdict = 'needs-offline'
-  } else if (gpusNeeded <= MAX_SUGGESTED_GPUS) {
+  } else if (gpusNeeded !== null && gpusNeeded <= MAX_SUGGESTED_GPUS) {
     verdict = 'needs-more-gpus'
   } else {
     verdict = 'needs-offload'
@@ -228,7 +242,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'Arithmetic duration',
-      detail: `One ${inputs.gpu.label} reaches ${inputs.gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense. With ${inputs.gpuCount} GPU at ${(inputs.mfu * 100).toFixed(0)} percent utilisation, the arithmetic takes ${(computeSeconds / 3600).toFixed(2)} hours.`,
+      detail: `One ${inputs.gpu.label} reaches ${inputs.gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense. With ${inputs.gpuCount} ${inputs.gpuCount === 1 ? 'GPU' : 'GPUs'} at ${(inputs.mfu * 100).toFixed(0)} percent utilisation, the arithmetic takes ${(computeSeconds / 3600).toFixed(2)} hours.`,
     },
     {
       label: 'Target cache reads',
@@ -242,7 +256,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'VRAM',
-      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16, and the optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}, and the activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text}.`} The peak is therefore ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM on the GPU.`,
+      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16, and the optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}, and the activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text}.`} The model state comes to ${formatBytes(modelStateBytes).text}${gpuCount > 1 ? `, which is ${formatBytes(modelStateBytes / gpuCount).text} on each of the ${gpuCount} GPUs` : ''}. With the activation buffer and the reserve on top, one card holds ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM.`,
     },
   ]
 
@@ -271,6 +285,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     { key: 'training_tokens', value: inputs.trainingTokens, source: '1 pass over the training set' },
     { key: 'epochs', value: inputs.epochs, source: 'the number of passes over the training set' },
     { key: 'draft_params', value: draftParams, source: 'the trained drafter, without the frozen shared embedding and head' },
+    { key: 'gpu_count', value: gpuCount, source: 'the cards the run is spread over' },
   ]
 
   const assumptions = [
@@ -283,6 +298,12 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     'The activation buffer is an estimate of the live intermediates in the drafter forward pass. It is not a measured value. Lower the micro batch if the real run runs out of VRAM.',
     'Model flops utilisation covers the kernel efficiency. A shallow drafter over short blocks reaches a smaller share of the peak than a large model does. One third is therefore optimistic. Trust the estimate and not the raw FLOPs.',
     'The overhead factor covers the data loader, the cache reader, the checkpoint writer, and the scheduler. None of these appear in the FLOPs.',
+    'The weights, the optimizer state, the gradients and the resident target are model state. The run divides each of them across the card count, which is what ZeRO and FSDP do. The activation buffer and the framework reserve stay on every card and do not divide. The memory figures report the share that one card holds.',
+    ...(offline
+      ? [
+          'The target cache sits on one store. Every card reads it over the same link, so the read duration does not fall as the card count rises. Raising the card count can therefore move the bound from the arithmetic to the cache read.',
+        ]
+      : []),
     anchorsClamped
       ? `The run caps the anchor count at ${formatExact(numAnchors)} for each sequence, which is 1 block for each sequence token. A ${formatExact(inputs.sequenceLength)} token sequence cannot hold the requested ${formatExact(inputs.numAnchors)} anchors. Raise the sequence length or lower the anchor count to change this.`
       : 'The anchor count fits the sequence length. The run therefore scores every requested block.',
@@ -325,6 +346,9 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     activationBytes,
     targetWeightBytes,
     runtimeReserveBytes: RUNTIME_OVERHEAD_BYTES,
+    gpuCount,
+    modelStateBytes,
+    perCardStateBytes: modelStateBytes / gpuCount,
     peakVramBytes,
     vramBytes,
     gpusNeeded,

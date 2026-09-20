@@ -87,7 +87,7 @@ export interface DsparkInputs {
 }
 
 export type DsparkVerdict =
-  /** The whole run fits the card as configured. */
+  /** The run fits the cards it is configured for. */
   | 'fits'
   /** Online capture does not fit but the offline cache does. */
   | 'needs-offline'
@@ -153,13 +153,32 @@ export interface DsparkResult {
   overheadFactor: number
 
   // --- Memory -------------------------------------------------------------
+  /** Sequences in flight on each card, which is what sizes the buffer. */
   activationBytes: number
   targetWeightBytes: number
   runtimeReserveBytes: number
+  /** Cards the run is spread over, as entered. */
+  gpuCount: number
+  /**
+   * Weights, optimizer state, gradients and the resident target, added up over
+   * the whole run. A run on several cards holds a slice of this, not a copy.
+   */
+  modelStateBytes: number
+  /** The share of the model state that one card holds. */
+  perCardStateBytes: number
+  /**
+   * The peak one card holds: its share of the model state, plus the activation
+   * buffer and the framework reserve, which do not divide. This is the figure
+   * the verdict compares against the VRAM of one card.
+   */
   peakVramBytes: number
   vramBytes: number
-  /** Cards the peak would need, for the message when one is not enough. */
-  gpusNeeded: number
+  /**
+   * The smallest card count whose share of the model state fits beside the
+   * per-card terms. Null when those terms alone exceed one card, which no card
+   * count can fix.
+   */
+  gpusNeeded: number | null
 
   steps: Array<{ label: string; detail: string }>
   constants: Array<{ key: string; value: number | string; source: string }>

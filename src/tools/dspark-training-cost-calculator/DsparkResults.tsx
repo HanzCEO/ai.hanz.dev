@@ -101,6 +101,20 @@ export default function DsparkResults({
       : 'the storage that feeds the target cache back'
   const cachePerToken = formatBytes(result.cacheBytesPerToken)
 
+  // The card count the panel reports. A run that fits is reported at the count
+  // the user entered, so the sentence can never disagree with the verdict. A
+  // run that does not fit is reported at the count it would take.
+  const gpuSentence =
+    result.verdict === 'needs-more-gpus'
+      ? `The peak needs ${result.gpusNeeded} GPUs. `
+      : result.verdict === 'needs-offload'
+        ? result.gpusNeeded === null
+          ? 'The activation buffer alone does not fit one card, so no card count holds this run. '
+          : `The peak needs ${result.gpusNeeded} GPUs, which is more than this calculator will recommend. `
+        : result.gpuCount > 1
+          ? `The run divides across ${result.gpuCount} GPUs. `
+          : ''
+
   return (
     <div className="flex flex-col gap-4" aria-live="polite">
       {shape.looksLikeDraftConfig && (
@@ -142,9 +156,7 @@ export default function DsparkResults({
             Training a DSpark drafter against {targetLabel} takes about{' '}
             <strong>{formatDuration(result.estimateSeconds)}</strong> on {gpu.label}. The target has{' '}
             {formatExact(shape.numLayers)} blocks and {formatExact(shape.hiddenSize)} hidden.{' '}
-            {Number(result.vramBytes) > 0 && result.verdict !== 'fits'
-              ? `The run divides across ${result.gpusNeeded} GPUs. `
-              : ''}
+            {gpuSentence}
             The run is limited by {boundLabel}.
           </p>
 
@@ -285,7 +297,8 @@ export default function DsparkResults({
               />
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">
-                  {formatBytes(result.peakVramBytes).text} peak against{' '}
+                  {formatBytes(result.peakVramBytes).text} peak
+                  {result.gpuCount > 1 ? ` for each of the ${result.gpuCount} cards` : ''} against{' '}
                   {formatBytes(result.vramBytes).text} of VRAM on {gpu.label}
                 </p>
                 <p className="text-muted-foreground text-sm">
@@ -294,8 +307,11 @@ export default function DsparkResults({
                   {formatBytes(result.optimizerBytes).text}. The gradients need{' '}
                   {formatBytes(result.gradientBytes).text}. The activation buffer needs{' '}
                   {formatBytes(result.activationBytes).text}.
+                  {result.gpuCount > 1
+                    ? ` The model state adds up to ${formatBytes(result.modelStateBytes).text}, and the run divides it so that each card holds ${formatBytes(result.perCardStateBytes).text}.`
+                    : ''}
                   {offline
-                    ? ' Offline capture keeps the target out of VRAM while the drafter trains. That is why one GPU is enough.'
+                    ? ` Offline capture keeps the target out of VRAM while the drafter trains, so the drafter and its state set the peak.${result.verdict === 'fits' && result.gpuCount === 1 ? ' That is why one GPU is enough.' : ''}`
                     : ` Online capture keeps the ${formatBytes(result.targetWeightBytes).text} target in VRAM for the whole run.`}
                 </p>
                 {result.verdict === 'needs-offline' && (
@@ -306,15 +322,18 @@ export default function DsparkResults({
                 )}
                 {result.verdict === 'needs-more-gpus' && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
-                    One GPU is not enough for the drafter and its state. Divide the run across{' '}
-                    {result.gpusNeeded} GPUs, or lower the micro batch to make the activation buffer
-                    smaller.
+                    {result.gpuCount === 1
+                      ? 'One GPU is not enough for the drafter and its state.'
+                      : `${result.gpuCount} GPUs are not enough for the drafter and its state.`}{' '}
+                    Divide the run across {result.gpusNeeded} GPUs, or lower the micro batch to make
+                    the activation buffer smaller.
                   </p>
                 )}
                 {result.verdict === 'needs-offload' && (
                   <p className="text-sm text-rose-700 dark:text-rose-400">
-                    No reasonable number of GPUs holds this. Lower the micro batch, use fewer draft
-                    layers, or move the optimizer state to host memory.
+                    {result.gpusNeeded === null
+                      ? 'The activation buffer and the framework reserve do not fit one card on their own, so no card count holds this run. Lower the micro batch first.'
+                      : `The peak needs ${result.gpusNeeded} GPUs, which is more than this calculator will recommend. Lower the micro batch, use fewer draft layers, or move the optimizer state to host memory.`}
                   </p>
                 )}
                 {result.verdict === 'fits' && (

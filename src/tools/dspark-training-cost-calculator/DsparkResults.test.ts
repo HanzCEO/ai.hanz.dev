@@ -132,6 +132,29 @@ describe('DsparkResults with a pasted target config', () => {
     expect(html).toMatch(/Fits|Needs offline capture|Needs more GPUs|Needs offloading/)
   })
 
+  it('reports the card count the run is spread over', () => {
+    const one = visibleText(render(QWEN3_4B, { gpuCount: 1 }))
+    const four = visibleText(render(QWEN3_4B, { gpuCount: 4 }))
+    // One card needs no sentence. Four are named, and the run still fits.
+    expect(one).not.toContain('divides across')
+    expect(four).toContain('Fits')
+    expect(four).toContain('The run divides across 4 GPUs.')
+  })
+
+  it('lets the card count change the memory verdict', () => {
+    // 8 GiB holds neither the drafter nor its state on one card, and holds both
+    // once the run is spread over four. The panel used to name the cards the
+    // peak needed no matter how many the user entered, and to keep reporting
+    // that one card was not enough however many were given.
+    const gpu = findGpu('rtx-4060') as GpuSpec
+    const one = visibleText(render(QWEN3_4B, { gpu, gpuCount: 1 }))
+    const four = visibleText(render(QWEN3_4B, { gpu, gpuCount: 4 }))
+    expect(one).toContain('Needs more GPUs')
+    expect(one).toContain('The peak needs 2 GPUs.')
+    expect(four).toContain('Fits')
+    expect(four).toContain('The run divides across 4 GPUs.')
+  })
+
   it('renders the drafter cost', () => {
     const html = render(QWEN3_4B)
     expect(html).toContain('What does the drafter cost?')
