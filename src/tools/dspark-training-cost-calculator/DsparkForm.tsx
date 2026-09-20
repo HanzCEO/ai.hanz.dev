@@ -98,6 +98,7 @@ export default function DsparkForm({
             onChange={(modelId) => update({ modelId })}
             status={shapeState.status}
             idleHint="Type a model id for the target."
+            errorHint="The calculator cannot read that config."
             summary={
               shapeState.shape && (
                 <>

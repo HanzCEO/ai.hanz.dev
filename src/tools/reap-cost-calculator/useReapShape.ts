@@ -137,7 +137,7 @@ export function useReapShape(inputs: ReapFormInputs): ReapShapeState {
     } catch (error) {
       return {
         config: null,
-        error: error instanceof Error ? error.message : 'That config could not be read.',
+        error: error instanceof Error ? error.message : 'The calculator cannot read that config.',
       }
     }
   }, [inputs.mode, inputs.configText])
@@ -154,7 +154,7 @@ export function useReapShape(inputs: ReapFormInputs): ReapShapeState {
       return {
         ...IDLE,
         status: 'error',
-        error: hub.error?.message ?? 'Could not read that model config.',
+        error: hub.error?.message ?? 'The calculator cannot read that model config.',
       }
     }
     if (!hub.config) return IDLE

@@ -80,6 +80,7 @@ export default function ReapForm({ inputs, update, shapeState, gpu, invalidField
             onChange={(modelId) => update({ modelId })}
             status={shapeState.status}
             idleHint="Type a model id."
+            errorHint="The calculator cannot read that config."
             notMoeHint="That model has no expert bank."
             summary={
               shapeState.shape && (

@@ -94,7 +94,7 @@ function readyFrom(config: RawConfig, configUrl: string | null): DsparkShapeStat
     configUrl,
     error: shape
       ? null
-      : 'That config does not describe a decoder with a hidden size and a depth, so there is nothing to cost out.',
+      : 'That config describes no decoder with a hidden size and a depth. The calculator therefore has nothing to cost.',
   }
 }
 
@@ -115,7 +115,7 @@ export function useDsparkShape(inputs: DsparkFormInputs): DsparkShapeState {
     } catch (error) {
       return {
         config: null,
-        error: error instanceof Error ? error.message : 'That config could not be read.',
+        error: error instanceof Error ? error.message : 'The calculator cannot read that config.',
       }
     }
   }, [inputs.mode, inputs.configText])
@@ -132,7 +132,7 @@ export function useDsparkShape(inputs: DsparkFormInputs): DsparkShapeState {
       return {
         ...IDLE,
         status: 'error',
-        error: hub.error?.message ?? 'Could not read that model config.',
+        error: hub.error?.message ?? 'The calculator cannot read that model config.',
       }
     }
     if (!hub.config) return IDLE
