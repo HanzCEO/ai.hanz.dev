@@ -45,6 +45,12 @@ export interface DsparkTargetShape {
 
   /** True when a field had to be inferred rather than read. */
   bestEffort: boolean
+  /**
+   * True when the config carries DSpark draft fields, which means it may be a
+   * draft checkpoint rather than the target. Its num_hidden_layers would then
+   * be the draft's depth, and every figure derived from the depth is wrong.
+   */
+  looksLikeDraftConfig: boolean
   notes: string[]
 }
 
@@ -123,6 +129,13 @@ export interface DsparkResult {
   trainingTokens: number
   /** Captured target layers, the recipe field that sets the cache width. */
   numTargetLayers: number
+  /**
+   * Anchors actually used per sequence. Lower than the input when the requested
+   * count would score more positions than the sequence holds.
+   */
+  numAnchors: number
+  /** True when the anchor count had to be reduced to fit the sequence. */
+  anchorsClamped: boolean
   /** Tokens drafted per block, the gamma the drafter proposes at inference. */
   blockSize: number
   sequencesPerEpoch: number

@@ -103,6 +103,12 @@ export interface DsparkPreset {
   sequenceLength: number
   /** Passes over the training set. */
   epochs: number
+  /**
+   * Blocks sampled per sequence per step. Carried by the preset because it has
+   * to fit the sequence length: a recipe written for long sequences cannot be
+   * pointed at short ones without lowering this.
+   */
+  numAnchors: number
   note: string
 }
 
@@ -112,12 +118,12 @@ export function presetTrainingTokens(preset: DsparkPreset): number {
 }
 
 /**
- * Training set sizes, from a smoke test to the published recipe.
+ * Training set sizes, from a smoke test to two published recipes.
  *
- * The published setting is one pass over Open-PerfectBlend, which is about 1.24
- * billion tokens, read ten times. The DeepSpec README quotes roughly 38 TB for
- * the target cache at that setting with a Qwen3-4B target, which is the anchor
- * the engine is tested against.
+ * The last two are real runs whose settings their authors published, and they
+ * differ in an instructive way. DeepSeek read 1.24 billion tokens ten times.
+ * OpenBMB read 7.05 billion tokens six times, so five times as much unique data
+ * with less repetition, and published the acceptance length it bought them.
  */
 export const DSPARK_PRESETS: DsparkPreset[] = [
   {
@@ -126,6 +132,7 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     samples: 25_000,
     sequenceLength: 2048,
     epochs: 3,
+    numAnchors: 292,
     note: 'A smoke test, about 51 million tokens. Enough to prove the pipeline runs and the draft is learning, not enough to produce a drafter worth shipping.',
   },
   {
@@ -134,19 +141,30 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     samples: 125_000,
     sequenceLength: 4096,
     epochs: 5,
+    numAnchors: 585,
     note: 'A middle setting, about 512 million tokens. Roughly 0.4 of a pass over Open-PerfectBlend, enough for a usable drafter on one domain.',
   },
   {
-    id: 'published',
-    label: 'Published recipe',
+    id: 'deepspec',
+    label: 'DeepSpec paper recipe',
     samples: 302_000,
     sequenceLength: 4096,
     epochs: 10,
+    numAnchors: 512,
     note: 'One pass over Open-PerfectBlend, about 1.24 billion tokens, read ten times, which is what the paper trained each drafter on. Roughly 38 TB of target cache against a Qwen3-4B target.',
+  },
+  {
+    id: 'minicpm5-2b-dspark',
+    label: 'MiniCPM5-2B-DSpark recipe',
+    samples: 1_959_525,
+    sequenceLength: 600,
+    epochs: 6,
+    numAnchors: 85,
+    note: 'The recipe OpenBMB published for openbmb/MiniCPM5-2B-DSpark: 1,959,525 sequences read six times, which is 7.05 billion tokens, or five times the unique data of the paper recipe. Their published draft checkpoint is 323,776,001 parameters and reaches an acceptance length of 5.52 at temperature 0.',
   },
 ]
 
-export const DEFAULT_PRESET = 'medium'
+export const DEFAULT_PRESET = 'minicpm5-2b-dspark'
 
 export function findDsparkPreset(id: string): DsparkPreset | undefined {
   return DSPARK_PRESETS.find((preset) => preset.id === id)

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 
 import { GPU_PRESETS, STORAGE_PRESETS } from '@/lib/hardware'
 import {
+  DEFAULT_PRESET,
   DSPARK_PRESETS,
   type DsparkDataMode,
   type DsparkPreset,
@@ -70,17 +71,17 @@ export interface DsparkFormInputs {
 }
 
 /**
- * Qwen3-4B, which is the target the published drafters attach to and the model
- * the storage figure in the README is quoted against. Manual entry opens on it
- * so the fields show a real target rather than zeros.
+ * MiniCPM5-2B, the target the MiniCPM5-2B-DSpark recipe was trained against.
+ * Manual entry opens on it so the fields show a real target rather than zeros,
+ * and so the default view costs a run whose settings are all published.
  */
 export const MANUAL_DEFAULTS = {
-  hiddenSize: '2560',
-  intermediateSize: '9728',
-  numLayers: '36',
-  vocabSize: '151936',
-  attentionHeads: '32',
-  kvHeads: '8',
+  hiddenSize: '2048',
+  intermediateSize: '6144',
+  numLayers: '42',
+  vocabSize: '130560',
+  attentionHeads: '16',
+  kvHeads: '2',
   headDim: '128',
   routedExperts: '0',
   expertsPerToken: '0',
@@ -88,29 +89,29 @@ export const MANUAL_DEFAULTS = {
   moeLayers: '0',
 }
 
-export const DEFAULT_MODEL_ID = 'Qwen/Qwen3-4B'
+export const DEFAULT_MODEL_ID = 'openbmb/MiniCPM5-2B'
 
-const PUBLISHED = DSPARK_PRESETS.find((preset) => preset.id === 'published') as DsparkPreset
+const OPENING_PRESET = DSPARK_PRESETS.find((preset) => preset.id === DEFAULT_PRESET) as DsparkPreset
 
 const DEFAULTS: DsparkFormInputs = {
-  // Manual entry opens by default, pre-filled with Qwen3-4B and the published
-  // recipe. A calculator should show a worked answer before anything is typed,
-  // and it means the prerendered page carries real figures rather than a
-  // spinner. Switching to a model id reads a config instead.
+  // Manual entry opens by default, pre-filled with MiniCPM5-2B and the recipe
+  // OpenBMB published for its drafter. A calculator should show a worked answer
+  // before anything is typed, and it means the prerendered page carries real
+  // figures rather than a spinner. Switching to a model id reads a config.
   mode: 'manual',
   provider: 'huggingface',
   modelId: DEFAULT_MODEL_ID,
   token: '',
   configText: '',
   ...MANUAL_DEFAULTS,
-  samples: String(PUBLISHED.samples),
-  sequenceLength: String(PUBLISHED.sequenceLength),
-  epochs: String(PUBLISHED.epochs),
+  samples: String(OPENING_PRESET.samples),
+  sequenceLength: String(OPENING_PRESET.sequenceLength),
+  epochs: String(OPENING_PRESET.epochs),
   dataMode: 'offline',
   numTargetLayers: '5',
   numDraftLayers: '5',
   blockSize: '7',
-  numAnchors: '512',
+  numAnchors: String(OPENING_PRESET.numAnchors),
   markovRank: '256',
   gpuId: 'rtx-5090',
   gpuCount: '1',

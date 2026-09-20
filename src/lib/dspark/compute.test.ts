@@ -68,8 +68,9 @@ const TINY_TARGET: RawConfig = {
 }
 
 /**
- * Qwen3-4B, which is the target the DeepSpec README quotes its storage figure
- * against. The shape is what makes the 38 TB anchor reproducible.
+ * Qwen3-4B, which the DeepSpec storage figure is quoted against. The tie flag
+ * is the real one: Qwen3-4B ships a tied embedding, so the language model head
+ * is not stored twice. Its published checkpoint holds 4,022,468,096 parameters.
  */
 const QWEN3_4B: RawConfig = {
   model_type: 'qwen3',
@@ -80,7 +81,7 @@ const QWEN3_4B: RawConfig = {
   num_attention_heads: 32,
   num_key_value_heads: 8,
   head_dim: 128,
-  tie_word_embeddings: false,
+  tie_word_embeddings: true,
 }
 
 function shapeFrom(config: RawConfig): DsparkTargetShape {
@@ -393,6 +394,188 @@ describe('the memory verdict', () => {
     const four = estimateDspark(QWEN, inputs({ microBatchSize: 4, storage: hostRam }))
     expect(four.activationBytes).toBe(one.activationBytes * 4)
     expect(four.peakVramBytes).toBeGreaterThan(one.peakVramBytes)
+  })
+})
+
+/**
+ * openbmb/MiniCPM5-2B, the target the MiniCPM5-2B-DSpark recipe was trained
+ * against. A dense Llama-shaped 2B with 42 blocks.
+ */
+const MINICPM_TARGET: RawConfig = {
+  architectures: ['LlamaForCausalLM'],
+  model_type: 'llama',
+  hidden_size: 2048,
+  num_hidden_layers: 42,
+  intermediate_size: 6144,
+  vocab_size: 130560,
+  num_attention_heads: 16,
+  num_key_value_heads: 2,
+  head_dim: 128,
+  tie_word_embeddings: false,
+}
+
+/**
+ * openbmb/MiniCPM5-2B-DSpark, the draft checkpoint config.
+ *
+ * This is a draft config, not a target config: num_hidden_layers is the draft's
+ * depth while num_target_layers names the target's. It is here because it is the
+ * one published DSpark checkpoint that states its own parameter count, which
+ * makes it the only direct check on the draft parameter model.
+ */
+const MINICPM_DRAFT: RawConfig = {
+  architectures: ['Qwen3DSparkModel'],
+  model_type: 'qwen3',
+  hidden_size: 2048,
+  num_hidden_layers: 5,
+  intermediate_size: 6144,
+  vocab_size: 130560,
+  num_attention_heads: 16,
+  num_key_value_heads: 2,
+  head_dim: 128,
+  num_target_layers: 42,
+  block_size: 7,
+  target_layer_ids: [1, 10, 20, 30, 39],
+  markov_rank: 256,
+  mask_token_id: 75982,
+}
+
+const MINICPM = shapeFrom(MINICPM_TARGET)
+
+/**
+ * The MiniCPM5-2B-DSpark recipe, as OpenBMB published it.
+ *
+ * The card gives 1,959,525 sequences and 7,054,154,509 tokens over 6 epochs,
+ * which is 600 tokens per sequence per epoch. Anchors are not published, so they
+ * are set to one block per sequence token.
+ */
+function minicpmInputs(overrides: Partial<DsparkInputs> = {}): DsparkInputs {
+  return inputs({
+    numTargetLayers: 5,
+    trainingTokens: 1_959_525 * 600,
+    epochs: 6,
+    numAnchors: 85,
+    blockSize: 7,
+    numDraftLayers: 5,
+    markovRank: 256,
+    sequenceLength: 600,
+    ...overrides,
+  })
+}
+
+describe('the published MiniCPM5-2B-DSpark recipe', () => {
+  /**
+   * The model card states the draft parameter count outright, which no other
+   * published DSpark checkpoint does. It is the only direct check on the draft
+   * parameter model rather than on a figure derived from it.
+   */
+  it('reproduces the published draft parameter count', () => {
+    const result = estimateDspark(MINICPM, minicpmInputs())
+    const published = 323_776_001
+    // The per-layer RMSNorm weights are the whole of the 25,857 gap. Nothing
+    // else in the draft is unaccounted for.
+    expect(result.draftParams).toBe(323_750_144)
+    expect(published - result.draftParams).toBe(25_857)
+    expect(Math.abs(result.draftParams - published) / published).toBeLessThan(0.0001)
+  })
+
+  it('breaks the draft count down the way the card implies', () => {
+    const result = estimateDspark(MINICPM, minicpmInputs())
+    // Five draft blocks of GQA attention plus a 3-wide SwiGLU feed forward.
+    expect(result.draftBackboneParams).toBe(5 * (9_437_184 + 3 * 2048 * 6144))
+    expect(result.draftBackboneParams).toBe(235_929_600)
+    // The projection fuses five captured target layers into the draft width.
+    expect(result.draftProjectionParams).toBe(5 * 2048 * 2048)
+    expect(result.draftProjectionParams).toBe(20_971_520)
+    // The rank 256 Markov head is a full vocabulary by rank pair.
+    expect(result.draftMarkovParams).toBe(2 * 130560 * 256)
+    expect(result.draftMarkovParams).toBe(66_846_720)
+    expect(result.draftConfidenceParams).toBe(2048 + 256)
+  })
+
+  it('reproduces the published training token count', () => {
+    // The card gives 7,054,154,509 tokens over 6 epochs, which is 1,175,692,418
+    // per epoch, or 599.99 tokens for each of 1,959,525 sequences.
+    const perEpoch = 1_959_525 * 600
+    expect(perEpoch).toBe(1_175_715_000)
+    expect(Math.abs(perEpoch * 6 - 7_054_154_509) / 7_054_154_509).toBeLessThan(0.0001)
+    expect(Math.abs(perEpoch - 1_175_692_418.1666)).toBeLessThan(25_000)
+  })
+
+  it('counts the target parameters the way the checkpoint does', () => {
+    // An untied model stores the vocabulary twice. MiniCPM5-2B ships
+    // 2,516,756,480 parameters, and the 174,080 gap is the RMSNorm weights.
+    expect(MINICPM.totalParams).toBe(2_516_582_400)
+    expect(2_516_756_480 - MINICPM.totalParams).toBe(174_080)
+    expect(Math.abs(MINICPM.totalParams - 2_516_756_480) / 2_516_756_480).toBeLessThan(0.0001)
+  })
+
+  it('sizes the cache from the published target layers', () => {
+    const result = estimateDspark(MINICPM, minicpmInputs())
+    // Five captured layers of 2048 bf16 values, the last hidden state, int32
+    // ids and two uint8 masks.
+    expect(result.cacheBytesPerToken).toBe(5 * 2048 * 2 + 2048 * 2 + 4 + 1 + 1)
+    expect(result.cacheBytesPerToken).toBe(24_582)
+    expect(result.cacheBytes).toBe(24_582 * 1_175_715_000)
+  })
+
+  it('reads the target as a dense model with no expert bank', () => {
+    expect(MINICPM.routedExperts).toBe(0)
+    expect(MINICPM.moeLayers).toBe(0)
+    expect(MINICPM.numLayers).toBe(42)
+    expect(MINICPM.bestEffort).toBe(false)
+  })
+})
+
+describe('the anchor cap', () => {
+  it('caps anchors at one block per sequence token', () => {
+    // The DeepSpec default of 512 anchors assumes a long sequence. Pointed at a
+    // 600 token sequence it would score more positions than the sequence holds.
+    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 512 }))
+    expect(result.numAnchors).toBe(85)
+    expect(result.anchorsClamped).toBe(true)
+    // The cap is what keeps supervision inside the data.
+    expect(result.positionsPerEpoch).toBeLessThanOrEqual(result.trainingTokens)
+  })
+
+  it('leaves an anchor count that fits alone', () => {
+    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 85 }))
+    expect(result.numAnchors).toBe(85)
+    expect(result.anchorsClamped).toBe(false)
+  })
+
+  it('does not cap a recipe that was written for long sequences', () => {
+    // 4096 tokens hold 585 blocks of 7, so the published 512 is not touched.
+    const result = estimateDspark(QWEN, inputs({ numAnchors: 512, sequenceLength: 4096 }))
+    expect(result.numAnchors).toBe(512)
+    expect(result.anchorsClamped).toBe(false)
+  })
+
+  it('says so in the steps and the assumptions when it caps', () => {
+    const result = estimateDspark(MINICPM, minicpmInputs({ numAnchors: 512 }))
+    const steps = result.steps.map((step) => step.detail).join(' ')
+    expect(steps).toContain('were reduced to 85')
+    expect(result.assumptions.some((line) => line.includes('capped at 85'))).toBe(true)
+  })
+})
+
+describe('a draft config read as a target', () => {
+  /**
+   * A draft checkpoint's own config has a plausible transformer shape, so it
+   * reads cleanly and silently. It is flagged instead, because its depth is the
+   * draft's and every figure derived from the depth would be wrong.
+   */
+  it('is flagged rather than silently accepted', () => {
+    const shape = detectDsparkShape(MINICPM_DRAFT)
+    expect(shape).not.toBeNull()
+    expect(shape?.looksLikeDraftConfig).toBe(true)
+    // The draft's depth, not the target's 42, which is the whole problem.
+    expect(shape?.numLayers).toBe(5)
+    expect(shape?.notes.some((note) => note.includes('num_target_layers 42'))).toBe(true)
+  })
+
+  it('is not flagged for a plain target config', () => {
+    expect(MINICPM.looksLikeDraftConfig).toBe(false)
+    expect(QWEN.looksLikeDraftConfig).toBe(false)
   })
 })
 

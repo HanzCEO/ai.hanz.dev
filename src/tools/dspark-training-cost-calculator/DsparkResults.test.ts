@@ -88,7 +88,7 @@ const QWEN3_4B = JSON.stringify({
   num_attention_heads: 32,
   num_key_value_heads: 8,
   head_dim: 128,
-  tie_word_embeddings: false,
+  tie_word_embeddings: true,
 })
 
 /**

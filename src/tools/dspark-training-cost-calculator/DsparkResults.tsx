@@ -101,6 +101,22 @@ export default function DsparkResults({
 
   return (
     <div className="flex flex-col gap-4" aria-live="polite">
+      {shape.looksLikeDraftConfig && (
+        <Alert className="border-amber-500/40 text-amber-700 dark:text-amber-400">
+          <AlertTriangle />
+          <AlertTitle>This looks like a draft config, not a target</AlertTitle>
+          <AlertDescription>
+            <p>
+              The config carries DSpark draft fields. Its{' '}
+              {formatExact(shape.numLayers)} blocks are the draft's depth, and the
+              target it was trained against is deeper, so every figure below that
+              depends on the depth is understated. Cost the target's own config
+              instead.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -134,7 +150,7 @@ export default function DsparkResults({
 
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Training tokens</dt>
+              <dt className="text-muted-foreground text-xs">Tokens per epoch</dt>
               <dd className="tabular-nums">{formatExact(result.trainingTokens)}</dd>
             </div>
             <div className="flex flex-col">
@@ -148,6 +164,13 @@ export default function DsparkResults({
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">Draft parameters</dt>
               <dd className="tabular-nums">{formatExact(result.draftParams)}</dd>
+            </div>
+            <div className="flex flex-col">
+              <dt className="text-muted-foreground text-xs">Anchors per sequence</dt>
+              <dd className="tabular-nums">
+                {formatExact(result.numAnchors)}
+                {result.anchorsClamped ? ' (capped)' : ''}
+              </dd>
             </div>
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">Target parameters</dt>
@@ -234,6 +257,14 @@ export default function DsparkResults({
                   The {result.overheadFactor}x overhead and setup land on top of the slower of the
                   two.
                 </p>
+                {result.anchorsClamped && (
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    The anchor count was capped at {formatExact(result.numAnchors)} per sequence,
+                    one block per sequence token, because the requested count would score more
+                    positions than the sequence holds. Raise the sequence length or lower the
+                    anchor count to change this.
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>

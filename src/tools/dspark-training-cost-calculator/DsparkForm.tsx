@@ -232,6 +232,9 @@ export default function DsparkForm({
                   samples: String(chosen.samples),
                   sequenceLength: String(chosen.sequenceLength),
                   epochs: String(chosen.epochs),
+                  // The anchor count travels with the recipe, because a count
+                  // written for long sequences does not fit a short one.
+                  numAnchors: String(chosen.numAnchors),
                 })
               }
             }}
@@ -338,7 +341,7 @@ export default function DsparkForm({
           <NumberField
             id="dspark-anchors"
             label="Anchors per sequence"
-            hint="Blocks sampled from each sequence per step."
+            hint="Blocks sampled from each sequence per step. Capped at one block per sequence token, so a short sequence needs fewer."
             min={1}
             value={inputs.numAnchors}
             onChange={(numAnchors) => update({ numAnchors })}

@@ -1,4 +1,4 @@
-import { readNumber, unwrapConfig } from '../model-config'
+import { readBoolean, readNumber, readNumberArray, unwrapConfig } from '../model-config'
 import type { RawConfig } from '../model-config'
 import { attentionParamsPerLayer } from '../model-shape'
 import { readMoeShapeFields } from '../model-shape/moe'
@@ -54,6 +54,33 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
     )
   }
 
+  // An untied model keeps a separate language model head, so the vocabulary is
+  // stored twice. That is what the checkpoint actually holds, and it is what has
+  // to be resident in online capture, so it has to be counted. Checked against
+  // three real checkpoints: Qwen3-4B is tied and lands at 4.02B, Qwen3-8B and
+  // MiniCPM5-2B are untied and land at 8.19B and 2.52B.
+  const tiedEmbeddings = readBoolean(inner, 'tie_word_embeddings') === true
+  if (!tiedEmbeddings && readBoolean(inner, 'tie_word_embeddings') === undefined) {
+    notes.push(
+      'The config does not say whether the embedding and the language model head are tied, so they are counted separately. A tied model would be one embedding table smaller.',
+    )
+  }
+
+  // A DSpark draft checkpoint carries the recipe it was trained with, including
+  // the target's depth under num_target_layers. Its own num_hidden_layers is the
+  // draft's depth, not the target's, so a draft config read as a target gives a
+  // plausible but wrong answer. Flagged rather than rejected, because the shape
+  // is still readable.
+  const declaredTargetLayers = readNumber(inner, 'num_target_layers')
+  const declaredTargetLayerIds = readNumberArray(inner, 'target_layer_ids')
+  const looksLikeDraftConfig =
+    declaredTargetLayers !== undefined || declaredTargetLayerIds !== undefined
+  if (looksLikeDraftConfig) {
+    notes.push(
+      `This config carries DSpark draft fields${declaredTargetLayers !== undefined ? `, including num_target_layers ${declaredTargetLayers}` : ''}. If it is a draft checkpoint rather than the target, then num_hidden_layers of ${numLayers.toLocaleString('en-US')} is the draft's depth and the target is deeper. Cost the target's own config instead.`,
+    )
+  }
+
   const attention = attentionParamsPerLayer(config)
 
   // --- Expert bank, when the target has one -------------------------------
@@ -72,7 +99,7 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
   const attentionParams = numLayers * attention
   const denseFfnParams = denseLayers * 3 * hiddenSize * intermediateSize
   const routedExpertParams = moeLayers * routedExperts * paramsPerExpert
-  const embedParams = vocabSize * hiddenSize
+  const embedParams = vocabSize * hiddenSize * (tiedEmbeddings ? 1 : 2)
 
   const totalParams = attentionParams + denseFfnParams + routedExpertParams + embedParams
 
@@ -92,6 +119,7 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
     expertsPerToken,
     moeIntermediateSize,
     moeLayers,
+    looksLikeDraftConfig,
     totalParams,
     activeParamsPerToken,
     bestEffort,

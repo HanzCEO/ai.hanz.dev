@@ -118,11 +118,18 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
   //
   // Training samples anchor blocks rather than running over the sequence, so
   // the positions actually scored are the sequence count times the anchors per
-  // sequence times the tokens per block. That is far fewer positions than there
-  // are tokens, which is what makes a drafter cheap to train despite the cache
-  // being enormous.
+  // sequence times the tokens per block.
+  //
+  // An anchor count larger than the sequence can hold would score more positions
+  // than the sequence has tokens, which cannot happen. It arises when a recipe
+  // written for long sequences is pointed at a short one, so the count is capped
+  // at one block per sequence token and the cap is reported.
+  const maxAnchors = Math.floor(inputs.sequenceLength / inputs.blockSize)
+  const numAnchors = Math.max(1, Math.min(inputs.numAnchors, maxAnchors))
+  const anchorsClamped = numAnchors < inputs.numAnchors
+
   const sequencesPerEpoch = inputs.trainingTokens / inputs.sequenceLength
-  const positionsPerEpoch = sequencesPerEpoch * inputs.numAnchors * inputs.blockSize
+  const positionsPerEpoch = sequencesPerEpoch * numAnchors * inputs.blockSize
 
   // Six flops per parameter per position: a forward and a backward pass.
   const trainingFlops = 6 * positionsPerEpoch * inputs.epochs * draftParams
@@ -131,7 +138,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
   // quadratic term in the context length and does not shrink with the anchors.
   const contextFlops =
     4 *
-    inputs.numAnchors *
+    numAnchors *
     inputs.blockSize *
     inputs.sequenceLength *
     hiddenSize *
@@ -158,7 +165,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
   // --- Memory -------------------------------------------------------------
   const activationBytes =
     inputs.microBatchSize *
-    inputs.numAnchors *
+    numAnchors *
     inputs.blockSize *
     hiddenSize *
     ACTIVATION_BYTES_PER_ELEMENT *
@@ -213,7 +220,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'Positions scored',
-      detail: `${tokensPerEpoch} tokens at ${formatExact(inputs.sequenceLength)} per sequence is ${formatExact(sequencesPerEpoch)} sequences. Each contributes ${inputs.numAnchors} anchors of ${inputs.blockSize} tokens, so one epoch scores ${formatExact(positionsPerEpoch)} positions, and ${inputs.epochs} epochs score ${formatExact(positionsPerEpoch * inputs.epochs)}.`,
+      detail: `${tokensPerEpoch} tokens at ${formatExact(inputs.sequenceLength)} per sequence is ${formatExact(sequencesPerEpoch)} sequences. Each contributes ${formatExact(numAnchors)} anchors of ${inputs.blockSize} tokens, so one epoch scores ${formatExact(positionsPerEpoch)} positions, and ${inputs.epochs} epochs score ${formatExact(positionsPerEpoch * inputs.epochs)}.${anchorsClamped ? ` The requested ${formatExact(inputs.numAnchors)} anchors were reduced to ${formatExact(numAnchors)}, which is one block per sequence token, because a ${formatExact(inputs.sequenceLength)} token sequence cannot hold more.` : ''}`,
     },
     {
       label: 'Arithmetic',
@@ -259,7 +266,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     { key: 'num_target_layers', value: inputs.numTargetLayers, source: 'recipe: captured layers' },
     { key: 'num_draft_layers', value: inputs.numDraftLayers, source: 'recipe: draft backbone depth' },
     { key: 'block_size', value: inputs.blockSize, source: 'recipe: gamma, the drafted block' },
-    { key: 'num_anchors', value: inputs.numAnchors, source: 'recipe: blocks sampled per sequence' },
+    { key: 'num_anchors', value: numAnchors, source: 'recipe: blocks sampled per sequence' },
     { key: 'markov_rank', value: inputs.markovRank, source: 'recipe: rank of the sequential head' },
     { key: 'training_tokens', value: inputs.trainingTokens, source: 'one pass over the training set' },
     { key: 'epochs', value: inputs.epochs, source: 'passes over the training set' },
@@ -276,6 +283,9 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     'The activation buffer is an estimate of the live intermediates in the draft forward pass, not a measured figure. Lower the micro batch if the real run runs out of memory.',
     'Model flops utilisation absorbs kernel efficiency. A shallow drafter over short blocks reaches a lower fraction of peak than a large model does, so a third is optimistic and the estimate is the figure to trust.',
     'The overhead factor covers the data loader, the cache reader, the checkpoint writer, and the scheduler, none of which appear in the FLOPs figure.',
+    anchorsClamped
+      ? `The anchor count was capped at ${formatExact(numAnchors)} per sequence, one block per sequence token, because the requested ${formatExact(inputs.numAnchors)} would score more positions than a ${formatExact(inputs.sequenceLength)} token sequence holds. Raise the sequence length or lower the anchor count to change this.`
+      : 'The anchor count fits the sequence length, so every requested block is scored.',
     'The confidence head is trained jointly with the draft. Serving its output well needs post-hoc calibration on held-out data, which is not part of this estimate.',
     ...shape.notes,
   ]
@@ -298,6 +308,8 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     gradientBytes,
     trainingTokens: inputs.trainingTokens,
     numTargetLayers: inputs.numTargetLayers,
+    numAnchors,
+    anchorsClamped,
     blockSize: inputs.blockSize,
     sequencesPerEpoch,
     positionsPerEpoch,

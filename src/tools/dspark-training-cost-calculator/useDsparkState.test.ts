@@ -26,19 +26,31 @@ function values(overrides: Partial<DsparkFormInputs> = {}): DsparkFormInputs {
 describe('DSPARK_SCHEMA', () => {
   const defaults = values()
 
-  it('opens on manual entry with the published recipe', () => {
+  it('opens on manual entry with the MiniCPM5-2B-DSpark recipe', () => {
     expect(defaults.mode).toBe('manual')
     expect(defaults.dataMode).toBe('offline')
-    expect(defaults.samples).toBe('302000')
-    expect(defaults.sequenceLength).toBe('4096')
-    expect(defaults.epochs).toBe('10')
+    // The recipe OpenBMB published: 1,959,525 sequences read six times.
+    expect(defaults.samples).toBe('1959525')
+    expect(defaults.sequenceLength).toBe('600')
+    expect(defaults.epochs).toBe('6')
+    // Anchors are not published, so they open at one block per sequence token.
+    expect(defaults.numAnchors).toBe('85')
   })
 
-  it('matches the published DSpark defaults', () => {
+  it('opens on MiniCPM5-2B as the target', () => {
+    expect(defaults.hiddenSize).toBe('2048')
+    expect(defaults.numLayers).toBe('42')
+    expect(defaults.intermediateSize).toBe('6144')
+    expect(defaults.vocabSize).toBe('130560')
+    expect(defaults.attentionHeads).toBe('16')
+    expect(defaults.kvHeads).toBe('2')
+    expect(defaults.headDim).toBe('128')
+  })
+
+  it('matches the draft recipe both published checkpoints use', () => {
     expect(defaults.blockSize).toBe('7')
     expect(defaults.numDraftLayers).toBe('5')
     expect(defaults.numTargetLayers).toBe('5')
-    expect(defaults.numAnchors).toBe('512')
     expect(defaults.markovRank).toBe('256')
   })
 
@@ -73,8 +85,12 @@ describe('DSPARK_SCHEMA', () => {
 })
 
 describe('activePresetId', () => {
-  it('recognises the published recipe', () => {
-    expect(activePresetId('302000', '4096', '10')).toBe('published')
+  it('recognises the MiniCPM5-2B-DSpark recipe', () => {
+    expect(activePresetId('1959525', '600', '6')).toBe('minicpm5-2b-dspark')
+  })
+
+  it('recognises the DeepSpec paper recipe', () => {
+    expect(activePresetId('302000', '4096', '10')).toBe('deepspec')
   })
 
   it('falls back to custom when any field differs', () => {
@@ -91,10 +107,13 @@ describe('manualConfig', () => {
 
     const shape = detectDsparkShape(config!)
     expect(shape).not.toBeNull()
-    expect(shape?.hiddenSize).toBe(2560)
-    expect(shape?.numLayers).toBe(36)
+    expect(shape?.hiddenSize).toBe(2048)
+    expect(shape?.numLayers).toBe(42)
     expect(shape?.moeLayers).toBe(0)
-    expect(shape?.totalParams).toBe(4_022_272_000)
+    expect(shape?.looksLikeDraftConfig).toBe(false)
+    // MiniCPM5-2B is untied, so the vocabulary is stored twice. The published
+    // checkpoint holds 2,516,756,480 parameters.
+    expect(shape?.totalParams).toBe(2_516_582_400)
   })
 
   it('builds an expert bank when a routed expert count is given', () => {
