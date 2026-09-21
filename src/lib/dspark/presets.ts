@@ -19,7 +19,7 @@ export const DEFAULT_NUM_ANCHORS = 512
 /** Rank of the low-rank Markov head, W1 and W2 in the paper. */
 export const DEFAULT_MARKOV_RANK = 256
 
-/** Captured target layers. The paper takes five, spread across the depth. */
+/** Captured target layers. The DeepSpec config takes five, spread across the depth. */
 export const DEFAULT_TARGET_LAYERS = 5
 
 /** Packed sequence length the target cache is built at. */
@@ -132,7 +132,7 @@ export function presetTrainingTokens(preset: DsparkPreset): number {
  * Training set sizes, from a smoke test to two published recipes.
  *
  * The last two are real runs whose settings their authors published, and they
- * differ in an instructive way. DeepSeek read 1.24 billion tokens ten times.
+ * differ in an instructive way. DeepSeek read about 1.24 billion tokens ten times.
  * OpenBMB read 7.05 billion tokens six times, so 5.7 times as much unique data
  * with less repetition, and published the acceptance length it bought them.
  */
@@ -162,7 +162,7 @@ export const DSPARK_PRESETS: DsparkPreset[] = [
     sequenceLength: 4096,
     epochs: 10,
     numAnchors: 512,
-    note: 'One pass over Open-PerfectBlend, about 1.24 billion tokens, read 10 times. The paper trained each drafter on this set. It writes roughly 38 TB of target cache against a Qwen3-4B target.',
+    note: 'This is one pass over Open-PerfectBlend, about 1.24 billion tokens, read 10 times. The paper trained each drafter on this set. DeepSpec publishes no sequence count, so 302,000 is the count the 38 TB in its README implies. That figure is the target cache for a Qwen3-4B target.',
   },
   {
     id: 'minicpm5-2b-dspark',

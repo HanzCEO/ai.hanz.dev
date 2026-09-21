@@ -111,7 +111,7 @@ describe('estimateReap on the anchor model', () => {
     expect(shape.moeIntermediateSize).toBe(768)
   })
 
-  it('lands the paper recipe inside the range measured independently for REAP scoring', () => {
+  it('lands the checkpoint recipe inside the range measured independently for REAP scoring', () => {
     // AIMER measured 0.75 to 2.96 hours for REAP expert scoring. The estimate
     // for this model on an H200 has to fall in the same band, or the model is
     // wrong by an order of magnitude.

@@ -265,9 +265,10 @@ describe('estimateDspark, a hand computed case', () => {
 describe('the published storage anchor', () => {
   /**
    * The DeepSpec README states that the default Qwen3-4B setting takes roughly
-   * 38 TB of target cache. That setting is one pass over Open-PerfectBlend,
-   * which is 1.3 million samples, at a packed sequence length of 4096, and the
-   * quoted figure is decimal terabytes. Reproducing it is the check that the
+   * 38 TB of target cache. DeepSpec publishes no sequence count for that setting,
+   * so the preset carries the count the quoted figure implies: 38 TB at 30726
+   * bytes for each token is about 1.24 billion tokens, which is about 302,000
+   * sequences at the 4096 token cap. Reproducing the figure is the check that the
    * cache row is laid out the way the implementation lays it out.
    */
   it('reproduces the 38 TB the DeepSpec README quotes', () => {

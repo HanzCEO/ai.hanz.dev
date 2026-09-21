@@ -102,7 +102,7 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
     expect(zero).toContain('total parameter count is unchanged')
   })
 
-  it('reports the long run honestly at the paper recipe', () => {
+  it('reports the long run honestly at the checkpoint recipe', () => {
     const html = render(glm53Text, {
       calibrationSamples: 24576,
       sequenceLength: 16384,

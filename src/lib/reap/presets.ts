@@ -28,7 +28,7 @@ export interface CalibrationPreset {
 /**
  * The two published recipes plus a middle setting.
  *
- * The paper calibrated on 24576 samples at 16384 tokens, which is 402 million
+ * The REAP repository calibrated on 24576 samples at 16384 tokens, which is 402 million
  * tokens and by far the dominant cost. The vLLM recipe uses 512 samples at 2048
  * tokens, which is about 400 times cheaper and is enough to rank experts.
  */
@@ -48,11 +48,11 @@ export const CALIBRATION_PRESETS: CalibrationPreset[] = [
     note: 'A middle setting. It uses about 34 million tokens. That is enough for a stable saliency ranking.',
   },
   {
-    id: 'paper',
-    label: 'Paper recipe',
+    id: 'checkpoint',
+    label: 'Checkpoint recipe',
     samples: 24576,
     sequenceLength: 16384,
-    note: 'This is the calibration mix published with REAP. It uses about 403 million tokens.',
+    note: 'This is the calibration mix published in the REAP repository, and it is the mix behind the released checkpoints. It uses about 403 million tokens.',
   },
 ]
 

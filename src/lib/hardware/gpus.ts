@@ -85,7 +85,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     vendor: 'nvidia',
     generation: 'Blackwell',
     vramGiB: 96,
-    bandwidthGBs: 1800,
+    bandwidthGBs: 1792,
     bf16DenseTflops: 500,
     fp8DenseTflops: 1000,
     note: '96 GB GDDR7. The largest single workstation card here.',
@@ -360,7 +360,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 5320,
     bf16DenseTflops: 1307,
     fp8DenseTflops: 2615,
-    note: '192 GB HBM3. Largest memory budget in this list.',
+    note: '192 GB HBM3. The largest AMD memory budget here.',
   },
 
   // AMD Radeon RX 9000 series, RDNA 4. FP8 tensor support is new here.

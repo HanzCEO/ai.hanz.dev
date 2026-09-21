@@ -12,7 +12,7 @@ export const REAP_FAQ: FaqItem[] = [
   {
     question: 'How long would it take to REAP a model?',
     answer:
-      'It is set almost entirely by the calibration token count, which is the number of samples times the sequence length. A quick pass of 512 samples at 2048 tokens is minutes on a modern card. The recipe published with the paper, 24576 samples at 16384 tokens, is about 403 million tokens and runs for tens of hours on a single GPU. Enter a model and a card above to get the figure for your case.',
+      'It is set almost entirely by the calibration token count, which is the number of samples times the sequence length. A quick pass of 512 samples at 2048 tokens is minutes on a modern card. The recipe published with the REAP repository, 24576 samples at 16384 tokens, is about 403 million tokens and runs for tens of hours on a single GPU. Enter a model and a card above to get the figure for your case.',
   },
   {
     question: 'Can I prune a mixture of experts model on one GPU?',
@@ -22,7 +22,7 @@ export const REAP_FAQ: FaqItem[] = [
   {
     question: 'How many calibration samples does REAP need?',
     answer:
-      'The paper calibrated on 24576 samples at 16384 tokens. The vLLM llm-compressor example uses 512 samples at 2048 tokens and still ranks experts well. Fewer samples cost proportionally less time but give a noisier saliency ranking, and a dataset that misses a topic can mark the experts for that topic as unimportant.',
+      'The REAP paper calibrated on 1024 samples at 2048 tokens for models up to 110 billion parameters. It calibrated on 12228 samples at 16384 tokens above that. The REAP repository uses a mix of 24576 samples at 16384 tokens for the released checkpoints. The vLLM llm-compressor example uses 512 samples at 2048 tokens and still ranks experts well. Fewer samples cost proportionally less time but give a noisier saliency ranking, and a dataset that misses a topic can mark the experts for that topic as unimportant.',
   },
   {
     question: 'Does REAP make inference faster?',
