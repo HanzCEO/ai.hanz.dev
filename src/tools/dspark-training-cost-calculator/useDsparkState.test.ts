@@ -54,6 +54,10 @@ describe('DSPARK_SCHEMA', () => {
     expect(defaults.markovRank).toBe('256')
   })
 
+  it('opens the target on the automatic weight format', () => {
+    expect(defaults.targetWeightFormat).toBe('auto')
+  })
+
   it('writes nothing to the URL when every field is at its default', () => {
     expect(serializeState(DSPARK_SCHEMA, defaults)).toBe('')
   })
@@ -70,17 +74,27 @@ describe('DSPARK_SCHEMA', () => {
   it('round trips a changed value', () => {
     const serialized = serializeState(
       DSPARK_SCHEMA,
-      values({ dataMode: 'online', numTargetLayers: '2', gpuCount: '4' }),
+      values({ dataMode: 'online', numTargetLayers: '2', gpuCount: '4', targetWeightFormat: 'MXFP4' }),
     )
     const params = new URLSearchParams(serialized)
     expect(params.get('data')).toBe('online')
     expect(params.get('target_layers')).toBe('2')
     expect(params.get('gpus')).toBe('4')
+    expect(params.get('target_weights')).toBe('MXFP4')
   })
 
   it('rejects a data mode it does not recognise', () => {
     expect(DSPARK_SCHEMA.dataMode.parse('sideways')).toBeNull()
     expect(DSPARK_SCHEMA.dataMode.parse('online')).toBe('online')
+  })
+
+  it('accepts the automatic weight format and every format id', () => {
+    expect(DSPARK_SCHEMA.targetWeightFormat.parse('auto')).toBe('auto')
+    expect(DSPARK_SCHEMA.targetWeightFormat.parse('BF16')).toBe('BF16')
+    expect(DSPARK_SCHEMA.targetWeightFormat.parse('FP8_E4M3')).toBe('FP8_E4M3')
+    expect(DSPARK_SCHEMA.targetWeightFormat.parse('MXFP4')).toBe('MXFP4')
+    expect(DSPARK_SCHEMA.targetWeightFormat.parse('NVFP4')).toBe('NVFP4')
+    expect(DSPARK_SCHEMA.targetWeightFormat.parse('FP4')).toBeNull()
   })
 })
 

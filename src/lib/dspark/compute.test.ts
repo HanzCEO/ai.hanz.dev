@@ -39,6 +39,7 @@ const TEST_GPU: GpuSpec = {
   bandwidthGBs: 1000,
   bf16DenseTflops: 1,
   fp8DenseTflops: null,
+  fp4DenseTflops: null,
   note: 'A fixture, not a real part.',
 }
 
@@ -105,6 +106,7 @@ function inputs(overrides: Partial<DsparkInputs> = {}): DsparkInputs {
     markovRank: DEFAULT_MARKOV_RANK,
     sequenceLength: DEFAULT_SEQUENCE_LENGTH,
     dataMode: 'offline',
+    targetWeightFormat: 'BF16',
     // The reference configurations assume a single node of eight, and the
     // published recipe quotes its storage figure against exactly that.
     gpu: findGpu('h200') as GpuSpec,
@@ -403,6 +405,50 @@ describe('offline against online', () => {
     // The target is the whole of the difference in model state. The peak that
     // one card holds divides that state, so it is the state that is compared.
     expect(online.modelStateBytes - offline.modelStateBytes).toBe(online.targetWeightBytes)
+  })
+})
+
+describe('the target weight format', () => {
+  const hostRam = findStorage('pcie5-host-ram') as StorageSpec
+
+  it('keeps the BF16 target at two bytes for each weight', () => {
+    const result = estimateDspark(
+      QWEN,
+      inputs({ dataMode: 'online', storage: hostRam, targetWeightFormat: 'BF16' }),
+    )
+    expect(result.targetWeightFormat).toBe('BF16')
+    expect(result.targetBytesPerWeight).toBe(2)
+    expect(result.targetWeightBytes).toBe(QWEN.totalParams * 2)
+  })
+
+  it('cuts the resident target to about a quarter in MXFP4', () => {
+    const bf16 = estimateDspark(
+      QWEN,
+      inputs({ dataMode: 'online', storage: hostRam, targetWeightFormat: 'BF16' }),
+    )
+    const mxfp4 = estimateDspark(
+      QWEN,
+      inputs({ dataMode: 'online', storage: hostRam, targetWeightFormat: 'MXFP4' }),
+    )
+    expect(mxfp4.targetWeightFormat).toBe('MXFP4')
+    expect(mxfp4.targetBytesPerWeight).toBeCloseTo(0.53125, 10)
+    // Two bytes against 0.53125 is about 3.76 times smaller.
+    expect(bf16.targetWeightBytes / mxfp4.targetWeightBytes).toBeCloseTo(2 / 0.53125, 3)
+  })
+
+  it('leaves the drafter, the optimizer, the gradients and the cache in BF16', () => {
+    const bf16 = estimateDspark(
+      QWEN,
+      inputs({ dataMode: 'offline', storage: hostRam, targetWeightFormat: 'BF16' }),
+    )
+    const mxfp4 = estimateDspark(
+      QWEN,
+      inputs({ dataMode: 'offline', storage: hostRam, targetWeightFormat: 'MXFP4' }),
+    )
+    expect(mxfp4.draftWeightBytes).toBe(bf16.draftWeightBytes)
+    expect(mxfp4.optimizerBytes).toBe(bf16.optimizerBytes)
+    expect(mxfp4.gradientBytes).toBe(bf16.gradientBytes)
+    expect(mxfp4.cacheBytes).toBe(bf16.cacheBytes)
   })
 })
 

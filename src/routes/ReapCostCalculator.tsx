@@ -71,8 +71,8 @@ export default function ReapCostCalculator() {
     }
   }, [shapeState.status, shapeState.shape, inputs, gpu, storage])
 
-  // Open a newly selected model on the precision its checkpoint ships in. A
-  // shared link that names a precision keeps its own choice.
+  // Open a newly selected model on the weight format its checkpoint ships in. A
+  // shared link that names a format keeps its own choice.
   const dtypeSeededFor = useRef<string | null>(null)
   useEffect(() => {
     if (shapeState.status !== 'ready') return

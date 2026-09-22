@@ -38,6 +38,7 @@ function inputs(overrides: Partial<DsparkInputs> = {}): DsparkInputs {
     markovRank: DEFAULT_MARKOV_RANK,
     sequenceLength: 4096,
     dataMode: 'offline',
+    targetWeightFormat: 'BF16',
     gpu: RTX_5090,
     storage: findStorage('pcie5-host-ram')!,
     gpuCount: 1,
@@ -64,6 +65,7 @@ function render(configText: string, overrides: Partial<DsparkInputs> = {}): stri
     config,
     configUrl: null,
     error: shape ? null : 'That config is not a decoder.',
+    suggestedWeightFormat: null,
   }
   return renderToString(
     createElement(DsparkResults, {
@@ -269,6 +271,7 @@ describe('DsparkResults in the idle, error and compute error states', () => {
     config: null,
     configUrl: null,
     error: null,
+    suggestedWeightFormat: null,
   }
 
   it('prompts for input before anything is entered', () => {

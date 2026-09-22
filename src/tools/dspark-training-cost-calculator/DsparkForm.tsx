@@ -10,6 +10,7 @@ import {
   type DsparkInputField,
 } from '@/lib/dspark'
 import { PROVIDER_LIST } from '@/lib/kvcache'
+import { WEIGHT_FORMAT_IDS, getWeightFormat, weightFormatLabel, type WeightFormatId } from '@/lib/weight-format'
 import GpuSelect from '@/components/hardware/GpuSelect'
 import {
   ConfigPasteField,
@@ -28,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-import { activePresetId, type DsparkFormInputs, type InputMode } from './useDsparkState'
+import { activePresetId, type DsparkFormInputs, type DsparkWeightChoice, type InputMode } from './useDsparkState'
 import type { DsparkShapeState } from './useDsparkShape'
 
 const MODE_LABELS: Array<{ id: InputMode; label: string; hint: string }> = [
@@ -48,6 +49,34 @@ const DATA_MODE_LABELS = [
     label: 'Capture online',
     hint: 'The run captures the target hidden states during training and writes nothing. It needs the whole target in VRAM for the entire run.',
   },
+]
+
+/** The bytes for each weight, in the short form the hint uses. */
+function bytesHint(id: WeightFormatId): string {
+  const spec = getWeightFormat(id)
+  if (spec.blockSize === null) {
+    return spec.bytes === 1 ? '1 byte for each weight' : `${spec.bytes} bytes for each weight`
+  }
+  return `${spec.bytes.toFixed(4)} bytes for each weight, with the scale sidecar`
+}
+
+/**
+ * The automatic choice first, then every format the calculator can price.
+ *
+ * Auto follows the target checkpoint. A named format forces one format on the
+ * frozen target. The drafter itself is always trained in BF16.
+ */
+const WEIGHT_OPTIONS: Array<{ id: DsparkWeightChoice; label: string; hint: string }> = [
+  {
+    id: 'auto',
+    label: 'Auto (from the target checkpoint)',
+    hint: 'The calculator reads the target weight format from its config.',
+  },
+  ...WEIGHT_FORMAT_IDS.map((id) => ({
+    id,
+    label: weightFormatLabel(id),
+    hint: bytesHint(id),
+  })),
 ]
 
 interface DsparkFormProps {
@@ -74,6 +103,8 @@ export default function DsparkForm({
   const sequenceLength = Number(inputs.sequenceLength)
   const tokens =
     Number.isFinite(samples) && Number.isFinite(sequenceLength) ? samples * sequenceLength : 0
+  const selectedWeight =
+    WEIGHT_OPTIONS.find((option) => option.id === inputs.targetWeightFormat) ?? WEIGHT_OPTIONS[0]
 
   return (
     <form className="flex flex-col gap-6" onSubmit={(event) => event.preventDefault()}>
@@ -369,6 +400,34 @@ export default function DsparkForm({
 
       <fieldset className="flex flex-col gap-4">
         <legend className="text-sm font-medium">Hardware</legend>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="dspark-target-weight" className="text-sm font-medium">
+            Target weight format
+          </label>
+          <Select
+            value={inputs.targetWeightFormat}
+            onValueChange={(next) => {
+              if (WEIGHT_OPTIONS.some((option) => option.id === next)) {
+                update({ targetWeightFormat: next as DsparkWeightChoice })
+              }
+            }}
+          >
+            <SelectTrigger id="dspark-target-weight" className="w-full">
+              <SelectValue>{selectedWeight.label}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {WEIGHT_OPTIONS.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {selectedWeight.hint} The drafter itself is always trained in bf16.
+          </p>
+        </div>
 
         <div className="flex flex-col gap-2">
           <label htmlFor="dspark-gpu" className="text-sm font-medium">

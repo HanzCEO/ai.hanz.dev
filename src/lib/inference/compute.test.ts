@@ -8,7 +8,6 @@ import { estimateInference } from './compute'
 import {
   ACTIVATION_BYTES_PER_ELEMENT,
   ACTIVATION_FACTOR,
-  BYTES_PER_WEIGHT,
   DEFAULT_MTP_HEAD,
   MTP_HEADS,
   RUNTIME_OVERHEAD_BYTES,
@@ -46,7 +45,6 @@ function shapeOf(config: RawConfig) {
 function inputs(config: RawConfig, overrides: Partial<InferenceInputs> = {}): InferenceInputs {
   return {
     config,
-    precision: 'BF16',
     contextLength: 8192,
     sequences: 1,
     headroom: 0.1,
@@ -59,16 +57,17 @@ const qwen3 = () => shapeOf(QWEN3_8B)
 const large = () => shapeOf(LARGE)
 
 describe('estimateInference memory', () => {
-  it('counts two bytes for each weight', () => {
+  it('costs a plain checkpoint at two bytes for each weight', () => {
     const result = estimateInference(qwen3(), inputs(QWEN3_8B))
-    expect(result.bytesPerWeight).toBe(2)
-    expect(result.weightsBytes).toBe(qwen3().totalParams * BYTES_PER_WEIGHT)
+    expect(result.weightQuantization.mixed).toBe(false)
+    expect(result.weightQuantization.primary).toBe('BF16')
+    expect(result.weightsBytes).toBe(qwen3().totalParams * 2)
   })
 
   it('gives the same footprint for FP16 and BF16', () => {
-    const bf16 = estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'BF16' }))
-    const fp16 = estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'FP16' }))
-    // The two precisions differ in range, not in size, so the answer cannot move.
+    const bf16 = estimateInference(qwen3(), inputs(QWEN3_8B, { weightFormat: 'BF16' }))
+    const fp16 = estimateInference(qwen3(), inputs(QWEN3_8B, { weightFormat: 'FP16' }))
+    // The two formats differ in range, not in size, so the answer cannot move.
     expect(fp16.weightsBytes).toBe(bf16.weightsBytes)
     expect(fp16.kvCacheBytes).toBe(bf16.kvCacheBytes)
     expect(fp16.totalBytes).toBe(bf16.totalBytes)
@@ -116,17 +115,17 @@ describe('estimateInference memory', () => {
     )
   })
 
-  it('defaults both cache dtypes to the weight precision', () => {
-    const result = estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'BF16' }))
+  it('defaults both cache dtypes to BF16', () => {
+    const result = estimateInference(qwen3(), inputs(QWEN3_8B, { weightFormat: 'MXFP4' }))
     expect(result.kvCacheDtype).toBe('BF16')
     expect(result.indexerDtype).toBe('BF16')
   })
 
-  it('gives the same cache for an omitted dtype as for the weight precision', () => {
-    const omitted = estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'FP16' }))
+  it('gives the same cache for an omitted dtype as for an explicit BF16', () => {
+    const omitted = estimateInference(qwen3(), inputs(QWEN3_8B, { weightFormat: 'MXFP4' }))
     const explicit = estimateInference(
       qwen3(),
-      inputs(QWEN3_8B, { precision: 'FP16', kvCacheDtype: 'FP16', indexerDtype: 'FP16' }),
+      inputs(QWEN3_8B, { weightFormat: 'MXFP4', kvCacheDtype: 'BF16', indexerDtype: 'BF16' }),
     )
     expect(omitted.kvCacheBytes).toBe(explicit.kvCacheBytes)
     expect(omitted.totalBytes).toBe(explicit.totalBytes)
@@ -155,10 +154,10 @@ describe('estimateInference memory', () => {
       qwen3(),
       inputs(QWEN3_8B, { kvCacheDtype: 'FP8_E4M3', indexerDtype: 'FP8_E4M3' }),
     )
-    // The weights are served in FP16 or BF16 whatever the cache is held in.
+    // The weights are served in the checkpoint format whatever the cache is held in.
     expect(narrow.weightsBytes).toBe(wide.weightsBytes)
-    expect(narrow.bytesPerWeight).toBe(wide.bytesPerWeight)
-    expect(narrow.precision).toBe(wide.precision)
+    expect(narrow.weightFormat).toBe(wide.weightFormat)
+    expect(narrow.expertWeightBytes).toBe(wide.expertWeightBytes)
   })
 
   it('reports the cache dtypes it costed', () => {
@@ -396,13 +395,13 @@ describe('estimateInference validation', () => {
     }
   })
 
-  it('rejects an unknown precision', () => {
+  it('rejects an unknown weight format', () => {
     try {
-      estimateInference(qwen3(), inputs(QWEN3_8B, { precision: 'FP8' as 'FP16' }))
+      estimateInference(qwen3(), inputs(QWEN3_8B, { weightFormat: 'FP4' as 'BF16' }))
       throw new Error('the call should have thrown')
     } catch (error) {
       expect(error).toBeInstanceOf(InferenceInputError)
-      expect((error as InferenceInputError).field).toBe('precision')
+      expect((error as InferenceInputError).field).toBe('weightFormat')
     }
   })
 })
@@ -419,11 +418,12 @@ describe('estimateInference explanations', () => {
     }
   })
 
-  it('names the two byte precision in the assumptions', () => {
+  it('names the weight format and the scale sidecar in the assumptions', () => {
     const result = estimateInference(qwen3(), inputs(QWEN3_8B))
     expect(
       result.assumptions.some((line) => line.includes('FP16') && line.includes('BF16')),
     ).toBe(true)
+    expect(result.assumptions.some((line) => line.includes('scale sidecar'))).toBe(true)
   })
 
   it('states that the buffer and the reserve stay on every card', () => {
@@ -471,7 +471,9 @@ describe('estimateInference on the MiMo-V2.6 releases', () => {
   it('sizes the MiMo-V2.6-Flash-RL cache through the inference path', () => {
     const result = estimateInference(shapeOf(FLASH), inputs(FLASH, { contextLength: 32768 }))
     expect(result.kvCacheBytes).toBe(780_533_760)
-    expect(result.weightsBytes).toBe(308_778_369_024 * BYTES_PER_WEIGHT)
+    expect(result.weightQuantization.experts).toBe('MXFP4')
+    expect(result.weightsBytes).toBeGreaterThan(308_778_369_024 * 0.5)
+    expect(result.weightsBytes).toBeLessThan(308_778_369_024 * 0.6)
     expect(result.shape.moeLayers).toBe(47)
     expect(result.shape.attentionParams).toBe(4_482_662_400)
   })
@@ -479,7 +481,9 @@ describe('estimateInference on the MiMo-V2.6 releases', () => {
   it('sizes the MiMo-V2.6-Pro-RL cache through the inference path', () => {
     const result = estimateInference(shapeOf(PRO), inputs(PRO, { contextLength: 32768 }))
     expect(result.kvCacheBytes).toBe(1_717_043_200)
-    expect(result.weightsBytes).toBe(1_021_247_225_856 * BYTES_PER_WEIGHT)
+    expect(result.weightQuantization.experts).toBe('MXFP4')
+    expect(result.weightsBytes).toBeGreaterThan(1_021_247_225_856 * 0.5)
+    expect(result.weightsBytes).toBeLessThan(1_021_247_225_856 * 0.6)
     expect(result.shape.moeLayers).toBe(69)
     expect(result.shape.attentionParams).toBe(18_717_081_600)
   })
@@ -493,6 +497,35 @@ describe('estimateInference on the MiMo-V2.6 releases', () => {
       expect(result.recommended).not.toBeNull()
       expect(result.recommended?.fits).toBe(true)
     }
+  })
+})
+
+describe('estimateInference on a mixed checkpoint', () => {
+  const V4_PRO = loadConfigFixture('deepseek-v4-pro')
+
+  it('costs MXFP4 experts beside FP8 attention and embeddings', () => {
+    const shape = shapeOf(V4_PRO)
+    const result = estimateInference(shape, inputs(V4_PRO))
+    expect(result.weightQuantization.mixed).toBe(true)
+    expect(result.weightQuantization.experts).toBe('MXFP4')
+    expect(result.weightQuantization.dense).toBe('FP8_E4M3')
+    expect(result.expertWeightBytes).not.toBe(result.denseWeightBytes)
+    // The mixed cost is far below the same checkpoint priced at two bytes.
+    expect(result.weightsBytes).toBeLessThan(shape.totalParams * 2)
+    expect(result.expertWeightBytes + result.denseWeightBytes).toBeCloseTo(result.weightsBytes, 6)
+  })
+
+  it('lets the reader force one format on every bucket', () => {
+    const forced = estimateInference(shapeOf(V4_PRO), inputs(V4_PRO, { weightFormat: 'BF16' }))
+    expect(forced.weightQuantization.mixed).toBe(false)
+    expect(forced.weightsBytes).toBe(shapeOf(V4_PRO).totalParams * 2)
+  })
+
+  it('reads fewer active bytes from a 4 bit expert bucket', () => {
+    const mixed = estimateInference(shapeOf(V4_PRO), inputs(V4_PRO))
+    const bf16 = estimateInference(shapeOf(V4_PRO), inputs(V4_PRO, { weightFormat: 'BF16' }))
+    expect(mixed.activeBytesPerToken).toBeGreaterThan(0)
+    expect(mixed.activeBytesPerToken).toBeLessThan(bf16.activeBytesPerToken)
   })
 })
 

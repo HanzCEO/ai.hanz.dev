@@ -16,9 +16,19 @@ import {
   useUrlSyncedState,
   type UrlSchema,
 } from '@/lib/url-state'
+import { isWeightFormatId, type WeightFormatId } from '@/lib/weight-format'
 
 /** Where the target shape comes from. */
 export type InputMode = 'hub' | 'paste' | 'manual'
+
+/**
+ * The target weight format field.
+ *
+ * `auto` follows the format the target checkpoint publishes. Every other value
+ * forces that one format on the frozen target. The drafter itself is always
+ * trained in BF16.
+ */
+export type DsparkWeightChoice = 'auto' | WeightFormatId
 
 export interface DsparkFormInputs {
   mode: InputMode
@@ -53,6 +63,7 @@ export interface DsparkFormInputs {
 
   // Recipe.
   dataMode: DsparkDataMode
+  targetWeightFormat: DsparkWeightChoice
   numTargetLayers: string
   numDraftLayers: string
   blockSize: string
@@ -108,6 +119,7 @@ const DEFAULTS: DsparkFormInputs = {
   sequenceLength: String(OPENING_PRESET.sequenceLength),
   epochs: String(OPENING_PRESET.epochs),
   dataMode: 'offline',
+  targetWeightFormat: 'auto',
   numTargetLayers: '5',
   numDraftLayers: '5',
   blockSize: '7',
@@ -125,6 +137,13 @@ const GPU_IDS = GPU_PRESETS.map((gpu) => gpu.id)
 const STORAGE_IDS = STORAGE_PRESETS.map((storage) => storage.id)
 const MODES: InputMode[] = ['hub', 'paste', 'manual']
 const DATA_MODES: DsparkDataMode[] = ['offline', 'online']
+
+/** Reads the automatic choice or a known format, and nothing else. */
+function parseWeightFormat(raw: string | null): DsparkWeightChoice | null {
+  if (raw === null) return null
+  if (raw === 'auto') return 'auto'
+  return isWeightFormatId(raw) ? raw : null
+}
 
 export const DSPARK_SCHEMA: UrlSchema<DsparkFormInputs> = {
   mode: { param: 'mode', default: DEFAULTS.mode, parse: enumOf(MODES) },
@@ -154,6 +173,11 @@ export const DSPARK_SCHEMA: UrlSchema<DsparkFormInputs> = {
   epochs: { param: 'epochs', default: DEFAULTS.epochs, parse: digitsOrNull },
 
   dataMode: { param: 'data', default: DEFAULTS.dataMode, parse: enumOf(DATA_MODES) },
+  targetWeightFormat: {
+    param: 'target_weights',
+    default: DEFAULTS.targetWeightFormat,
+    parse: parseWeightFormat,
+  },
   numTargetLayers: { param: 'target_layers', default: DEFAULTS.numTargetLayers, parse: digitsOrNull },
   numDraftLayers: { param: 'draft_layers', default: DEFAULTS.numDraftLayers, parse: digitsOrNull },
   blockSize: { param: 'block', default: DEFAULTS.blockSize, parse: digitsOrNull },
@@ -174,6 +198,8 @@ export interface DsparkSeeded {
   model: boolean
   gpu: boolean
   preset: boolean
+  /** True when the target weight format came from the URL. */
+  targetWeights: boolean
 }
 
 export function useDsparkState() {
@@ -188,6 +214,7 @@ export function useDsparkState() {
           model: flags.modelId,
           gpu: flags.gpuId,
           preset: flags.samples || flags.sequenceLength || flags.epochs,
+          targetWeights: flags.targetWeightFormat,
         }
       },
     }),

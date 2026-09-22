@@ -221,7 +221,7 @@ describe('the two steps agree on the cache', () => {
       })
       const hardwareStep = estimateInference(shape!, {
         config: QWEN3_8B,
-        precision: 'BF16',
+        weightFormat: 'BF16',
         contextLength: item.contextLength,
         sequences: item.sequences,
         headroom: 0.1,
@@ -245,7 +245,7 @@ describe('the two steps agree on the cache', () => {
     })
     const long = estimateInference(shape, {
       config: QWEN3_8B,
-      precision: 'BF16',
+      weightFormat: 'BF16',
       contextLength: 16384,
       sequences: 1,
       headroom: 0.1,

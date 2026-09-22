@@ -32,7 +32,6 @@ const LARGE: RawConfig = {
 function inputs(config: RawConfig, overrides: Partial<InferenceInputs> = {}): InferenceInputs {
   return {
     config,
-    precision: 'BF16',
     contextLength: 8192,
     sequences: 1,
     headroom: 0.1,
@@ -99,6 +98,12 @@ describe('InferenceResults with a model that fits one card', () => {
   it('names the cache dtype the answer was costed with', () => {
     const html = render(QWEN3_8B, { gpuFilter: ['rtx-4090'] })
     expect(html).toContain('Cache dtype')
+    expect(html).toContain('BF16')
+  })
+
+  it('names the weight format the answer was costed with', () => {
+    const html = render(QWEN3_8B, { gpuFilter: ['rtx-4090'] })
+    expect(html).toContain('Weight format')
     expect(html).toContain('BF16')
   })
 
@@ -179,6 +184,21 @@ describe('InferenceResults with a model that does not fit', () => {
   it('lists no configuration table, because none fits', () => {
     const html = render(LARGE, { gpuFilter: ['rtx-4090'], maxGpus: 2 })
     expect(html).not.toContain('Every configuration that fits')
+  })
+})
+
+describe('InferenceResults with a mixed checkpoint', () => {
+  const V4_PRO = loadConfigFixture('deepseek-v4-pro')
+
+  it('names both the expert format and the dense format', () => {
+    const shape = detectModelShape(V4_PRO)
+    expect(shape).not.toBeNull()
+    const html = visibleText(render(V4_PRO))
+    expect(html).toContain('Weight format')
+    expect(html).toContain('Expert format')
+    expect(html).toContain('Dense format')
+    expect(html).toContain('MXFP4')
+    expect(html).toContain('FP8 (E4M3)')
   })
 })
 

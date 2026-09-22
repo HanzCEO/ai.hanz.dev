@@ -7,16 +7,10 @@
  * calculator repeats it in its assumptions.
  */
 
-import type { MtpHeadType } from './types'
+import type { WeightFormatId } from '../weight-format'
+import { DEFAULT_WEIGHT_FORMAT, WEIGHT_FORMAT_IDS } from '../weight-format'
 
-/**
- * Bytes for each weight.
- *
- * FP16 and BF16 are both two bytes, so a model served in either one needs the
- * same VRAM and the same bandwidth. The two precisions differ in numeric range
- * and not in size, which is why this is a single constant and not a table.
- */
-export const BYTES_PER_WEIGHT = 2
+import type { MtpHeadType } from './types'
 
 /** Bytes in a gibibyte, the unit the GPU presets are quoted in. */
 export const GIB = 1024 ** 3
@@ -27,7 +21,7 @@ export const GIB = 1024 ** 3
  */
 export const RUNTIME_OVERHEAD_BYTES = 1.5 * GIB
 
-/** Bytes for each element of a live activation. Two for both precisions. */
+/** Bytes for each element of a live activation. Two, because activations stay in BF16. */
 export const ACTIVATION_BYTES_PER_ELEMENT = 2
 
 /**
@@ -60,10 +54,16 @@ export const DEFAULT_HEADROOM = 0.1
 /** The most cards the ranking will use before it reports that nothing fits. */
 export const MAX_SUGGESTED_GPUS = 8
 
-/** The precision the page opens on. */
-export const DEFAULT_PRECISION = 'BF16'
+/** The weight format the page opens on before the config is read. */
+export { DEFAULT_WEIGHT_FORMAT }
 
-export const PRECISIONS = ['FP16', 'BF16'] as const
+/**
+ * The formats the picker offers, alongside the automatic choice.
+ *
+ * The order runs from the widest to the narrowest, so a reader scrolling the
+ * list sees the memory fall as the format narrows.
+ */
+export const INFERENCE_WEIGHT_FORMATS: WeightFormatId[] = [...WEIGHT_FORMAT_IDS]
 
 /**
  * One speculative decoding head, with the figure it is held to.

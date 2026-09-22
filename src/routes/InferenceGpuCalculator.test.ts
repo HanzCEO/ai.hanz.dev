@@ -45,7 +45,7 @@ describe('InferenceGpuCalculator at the first paint', () => {
     // The content is unmounted, so none of its fields are in the markup.
     expect(html).not.toContain('id="inference-headroom"')
     expect(html).not.toContain('id="inference-max-gpus"')
-    expect(html).not.toContain('legend="Precision"')
+    expect(html).not.toContain('id="inference-weight-format"')
   })
 
   it('shows the cache panel reading the config rather than a wrong number', () => {
@@ -59,10 +59,10 @@ describe('InferenceGpuCalculator at the first paint', () => {
     }
   })
 
-  it('names both precisions on offer', () => {
-    // The precision picker lives in the closed step, so the page names it in
-    // its own description instead.
-    expect(html).toContain('FP16 or BF16')
+  it('names the weight format on offer', () => {
+    // The weight format picker lives in the closed step, so the page names it
+    // in its own description instead.
+    expect(html).toContain('weight format the checkpoint publishes')
   })
 
   it('uses no em dash or en dash', () => {

@@ -152,6 +152,14 @@ describe('dtypeNameToBytes', () => {
     expect(dtypeNameToBytes('int8')).toBe(1)
   })
 
+  it('maps every 4 bit name to half a byte', () => {
+    expect(dtypeNameToBytes('fp4')).toBe(0.5)
+    expect(dtypeNameToBytes('mxfp4')).toBe(0.5)
+    expect(dtypeNameToBytes('nvfp4')).toBe(0.5)
+    expect(dtypeNameToBytes('int4')).toBe(0.5)
+    expect(dtypeNameToBytes('4bit')).toBe(0.5)
+  })
+
   it('returns undefined for an unknown or absent name', () => {
     expect(dtypeNameToBytes('mystery')).toBeUndefined()
     expect(dtypeNameToBytes(undefined)).toBeUndefined()

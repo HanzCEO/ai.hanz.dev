@@ -14,6 +14,12 @@
  * fp8DenseTflops is null where the architecture has no FP8 tensor support.
  * That is Ampere (RTX 30xx) and RDNA 2 and RDNA 3 (RX 60xx and RX 70xx), so a
  * REAP run on those cards must be calibrated in BF16 or FP16.
+ *
+ * fp4DenseTflops is twice fp8DenseTflops on the architectures with a native FP4
+ * dense tensor path, which is Blackwell and RDNA 4. It is null everywhere else,
+ * and a null means the card has no FP4 path at all rather than a slow one. A
+ * 4 bit checkpoint on one of those cards is dequantized first, so it runs at the
+ * nearest rate the card does have.
  */
 
 export type GpuVendor = 'nvidia' | 'amd'
@@ -30,6 +36,8 @@ export interface GpuSpec {
   bf16DenseTflops: number
   /** Dense FP8 tensor throughput in TFLOPS, or null when unsupported. */
   fp8DenseTflops: number | null
+  /** Dense FP4 tensor throughput in TFLOPS, or null when the card has no FP4 path. */
+  fp4DenseTflops: number | null
   note: string
 }
 
@@ -44,6 +52,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 8000,
     bf16DenseTflops: 3500,
     fp8DenseTflops: 7000,
+    fp4DenseTflops: 14000,
     note: '288 GB HBM3e. The largest single-GPU budget here.',
   },
   {
@@ -55,6 +64,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 8000,
     bf16DenseTflops: 2250,
     fp8DenseTflops: 4500,
+    fp4DenseTflops: 9000,
     note: '192 GB HBM3e.',
   },
   {
@@ -66,6 +76,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 4800,
     bf16DenseTflops: 989,
     fp8DenseTflops: 1979,
+    fp4DenseTflops: null,
     note: '141 GB HBM3e. The reference point for most published REAP runs.',
   },
   {
@@ -77,6 +88,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 3350,
     bf16DenseTflops: 989,
     fp8DenseTflops: 1979,
+    fp4DenseTflops: null,
     note: '80 GB HBM3. The PCIe card is slower on memory: about 2.0 TB/s.',
   },
   {
@@ -88,6 +100,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 1792,
     bf16DenseTflops: 500,
     fp8DenseTflops: 1000,
+    fp4DenseTflops: 2000,
     note: '96 GB GDDR7. The largest single workstation card here.',
   },
 
@@ -101,6 +114,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 1792,
     bf16DenseTflops: 419,
     fp8DenseTflops: 838,
+    fp4DenseTflops: 1676,
     note: '32 GB GDDR7. 3352 AI TOPS.',
   },
   {
@@ -112,6 +126,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 960,
     bf16DenseTflops: 225,
     fp8DenseTflops: 450,
+    fp4DenseTflops: 900,
     note: '16 GB GDDR7. 1801 AI TOPS.',
   },
   {
@@ -123,6 +138,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 896,
     bf16DenseTflops: 176,
     fp8DenseTflops: 351,
+    fp4DenseTflops: 702,
     note: '16 GB GDDR7. 1406 AI TOPS.',
   },
   {
@@ -134,6 +150,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 672,
     bf16DenseTflops: 123,
     fp8DenseTflops: 247,
+    fp4DenseTflops: 494,
     note: '12 GB GDDR7. 988 AI TOPS.',
   },
   {
@@ -145,6 +162,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 448,
     bf16DenseTflops: 95,
     fp8DenseTflops: 190,
+    fp4DenseTflops: 380,
     note: '16 GB GDDR7. An 8 GB variant exists and will not fit a large block.',
   },
   {
@@ -156,6 +174,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 448,
     bf16DenseTflops: 77,
     fp8DenseTflops: 153,
+    fp4DenseTflops: 306,
     note: '8 GB GDDR7. 614 AI TOPS.',
   },
 
@@ -169,6 +188,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 1008,
     bf16DenseTflops: 165,
     fp8DenseTflops: 330,
+    fp4DenseTflops: null,
     note: '24 GB GDDR6X. 1321 AI TOPS.',
   },
   {
@@ -180,6 +200,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 736,
     bf16DenseTflops: 104,
     fp8DenseTflops: 209,
+    fp4DenseTflops: null,
     note: '16 GB GDDR6X.',
   },
   {
@@ -191,6 +212,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 717,
     bf16DenseTflops: 97,
     fp8DenseTflops: 195,
+    fp4DenseTflops: null,
     note: '16 GB GDDR6X.',
   },
   {
@@ -202,6 +224,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 672,
     bf16DenseTflops: 88,
     fp8DenseTflops: 176,
+    fp4DenseTflops: null,
     note: '16 GB GDDR6X.',
   },
   {
@@ -213,6 +236,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 504,
     bf16DenseTflops: 80,
     fp8DenseTflops: 160,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6X.',
   },
   {
@@ -224,6 +248,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 504,
     bf16DenseTflops: 71,
     fp8DenseTflops: 142,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6X.',
   },
   {
@@ -235,6 +260,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 504,
     bf16DenseTflops: 58,
     fp8DenseTflops: 116,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6X.',
   },
   {
@@ -246,6 +272,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 288,
     bf16DenseTflops: 44,
     fp8DenseTflops: 88,
+    fp4DenseTflops: null,
     note: '16 GB GDDR6. An 8 GB variant exists.',
   },
   {
@@ -257,6 +284,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 272,
     bf16DenseTflops: 30,
     fp8DenseTflops: 61,
+    fp4DenseTflops: null,
     note: '8 GB GDDR6.',
   },
 
@@ -270,6 +298,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 1008,
     bf16DenseTflops: 80,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '24 GB GDDR6X. Ampere has no FP8 path, so calibrate in BF16.',
   },
   {
@@ -281,6 +310,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 936,
     bf16DenseTflops: 71,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '24 GB GDDR6X. Ampere has no FP8 path.',
   },
   {
@@ -292,6 +322,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 912,
     bf16DenseTflops: 68,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6X. Ampere has no FP8 path.',
   },
   {
@@ -303,6 +334,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 760,
     bf16DenseTflops: 60,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '10 GB GDDR6X. Ampere has no FP8 path.',
   },
   {
@@ -314,6 +346,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 608,
     bf16DenseTflops: 44,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '8 GB GDDR6X. Ampere has no FP8 path.',
   },
   {
@@ -325,6 +358,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 448,
     bf16DenseTflops: 41,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '8 GB GDDR6. Ampere has no FP8 path.',
   },
   {
@@ -336,6 +370,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 448,
     bf16DenseTflops: 32,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '8 GB GDDR6. Ampere has no FP8 path.',
   },
   {
@@ -347,6 +382,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 360,
     bf16DenseTflops: 25,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6. Ampere has no FP8 path.',
   },
 
@@ -360,6 +396,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 5320,
     bf16DenseTflops: 1307,
     fp8DenseTflops: 2615,
+    fp4DenseTflops: null,
     note: '192 GB HBM3. The largest AMD memory budget here.',
   },
 
@@ -373,6 +410,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 645,
     bf16DenseTflops: 195,
     fp8DenseTflops: 389,
+    fp4DenseTflops: 778,
     note: '16 GB GDDR6. 1557 INT4 AI TOPS.',
   },
   {
@@ -384,6 +422,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 645,
     bf16DenseTflops: 146,
     fp8DenseTflops: 291,
+    fp4DenseTflops: 582,
     note: '16 GB GDDR6.',
   },
   {
@@ -395,6 +434,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 322,
     bf16DenseTflops: 103,
     fp8DenseTflops: 205,
+    fp4DenseTflops: 410,
     note: '16 GB GDDR6. An 8 GB variant exists.',
   },
 
@@ -408,6 +448,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 960,
     bf16DenseTflops: 123,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '24 GB GDDR6. RDNA 3 has no FP8 path.',
   },
   {
@@ -419,6 +460,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 800,
     bf16DenseTflops: 103,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '20 GB GDDR6. RDNA 3 has no FP8 path.',
   },
   {
@@ -430,6 +472,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 624,
     bf16DenseTflops: 75,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '16 GB GDDR6. RDNA 3 has no FP8 path.',
   },
   {
@@ -441,6 +484,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 432,
     bf16DenseTflops: 70,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6. RDNA 3 has no FP8 path.',
   },
   {
@@ -452,6 +496,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 288,
     bf16DenseTflops: 44,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '8 GB GDDR6. RDNA 3 has no FP8 path.',
   },
 
@@ -465,6 +510,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 512,
     bf16DenseTflops: 42,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '16 GB GDDR6. RDNA 2 has no FP8 path.',
   },
   {
@@ -476,6 +522,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 384,
     bf16DenseTflops: 26,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '12 GB GDDR6. RDNA 2 has no FP8 path.',
   },
   {
@@ -487,6 +534,7 @@ export const GPU_PRESETS: GpuSpec[] = [
     bandwidthGBs: 224,
     bf16DenseTflops: 18,
     fp8DenseTflops: null,
+    fp4DenseTflops: null,
     note: '8 GB GDDR6. RDNA 2 has no FP8 path.',
   },
 ]

@@ -3,19 +3,26 @@ import { useMemo } from 'react'
 import {
   DEFAULT_HEADROOM,
   DEFAULT_MTP_HEAD,
-  DEFAULT_PRECISION,
   MAX_SUGGESTED_GPUS,
   MTP_HEAD_IDS,
-  PRECISIONS,
-  type InferencePrecision,
   type MtpHeadType,
 } from '@/lib/inference'
 import { MANUAL_DEFAULTS } from '@/lib/model-config'
 import { decimalOrNull, digitsOrNull, enumOf, useUrlSyncedState, type UrlSchema } from '@/lib/url-state'
+import { isWeightFormatId, type WeightFormatId } from '@/lib/weight-format'
 import {
   CALCULATOR_SCHEMA,
   type CalculatorInputs,
 } from '@/tools/kv-cache-calculator/useCalculatorState'
+
+/**
+ * The weight format field.
+ *
+ * `auto` follows the format the checkpoint publishes, which is the default.
+ * Every other value forces that one format on the whole model, which is what a
+ * reader means when they say the run is served in FP8 or MXFP4.
+ */
+export type InferenceWeightChoice = 'auto' | WeightFormatId
 
 /**
  * The inference page inputs.
@@ -26,7 +33,7 @@ import {
  * offering the same input twice.
  */
 export interface InferenceFormInputs extends CalculatorInputs {
-  precision: InferencePrecision
+  weightFormat: InferenceWeightChoice
   /** The speculative decoding head the model is served with. */
   mtpHead: MtpHeadType
   /** Held as a percentage so the field reads the way a person would write it. */
@@ -47,6 +54,13 @@ export { DEFAULT_MODEL_ID } from '@/lib/use-config-source'
 /** The default VRAM headroom, as the percentage the field shows. */
 const DEFAULT_HEADROOM_PERCENT = String(DEFAULT_HEADROOM * 100)
 
+/** Reads the automatic choice or a known format, and nothing else. */
+function parseWeightFormat(raw: string | null): InferenceWeightChoice | null {
+  if (raw === null) return null
+  if (raw === 'auto') return 'auto'
+  return isWeightFormatId(raw) ? raw : null
+}
+
 /**
  * The four hardware fields this layer owns, layered over the cache schema.
  *
@@ -56,7 +70,7 @@ const DEFAULT_HEADROOM_PERCENT = String(DEFAULT_HEADROOM * 100)
  */
 export const INFERENCE_SCHEMA: UrlSchema<InferenceFormInputs> = {
   ...CALCULATOR_SCHEMA,
-  precision: { param: 'precision', default: DEFAULT_PRECISION, parse: enumOf(PRECISIONS) },
+  weightFormat: { param: 'weights', default: 'auto', parse: parseWeightFormat },
   mtpHead: { param: 'mtp', default: DEFAULT_MTP_HEAD, parse: enumOf(MTP_HEAD_IDS) },
   headroomPercent: {
     param: 'headroom',
@@ -69,7 +83,8 @@ export const INFERENCE_SCHEMA: UrlSchema<InferenceFormInputs> = {
 /** Fields the URL supplied, under the names the page reads. */
 export interface InferenceSeeded {
   model: boolean
-  precision: boolean
+  /** True when the weight format came from the URL. */
+  weights: boolean
   /** True when the MTP head came from the URL. */
   mtp: boolean
   context: boolean
@@ -90,7 +105,7 @@ export function useInferenceState() {
         const flags = fieldSeeded.current
         return {
           model: flags.modelId,
-          precision: flags.precision,
+          weights: flags.weightFormat,
           mtp: flags.mtpHead,
           context: flags.contextLength,
           sequences: flags.sequenceCount,

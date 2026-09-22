@@ -13,6 +13,10 @@ export const DTYPES: DtypeSpec[] = [
   { id: 'FP8_E5M2', label: 'FP8 (E5M2)', bytes: 1 },
   { id: 'INT8', label: 'INT8', bytes: 1 },
   { id: 'INT4', label: 'INT4', bytes: 0.5 },
+  // A block scaled 4 bit cache. The KV path stores one E4M3 scale for each 16
+  // values, and the indexer path stores one E8M0 scale for each 32 values, so
+  // the payload is half a byte and the scale adds a little more. The size
+  // formula adds that scale itself.
   { id: 'FP4', label: 'FP4', bytes: 0.5 },
 ]
 

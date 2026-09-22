@@ -1,4 +1,5 @@
 import type { GpuSpec, StorageSpec } from '../hardware'
+import type { WeightFormatId } from '../weight-format'
 
 /**
  * How the target's supervision reaches the draft during training.
@@ -72,6 +73,14 @@ export interface DsparkInputs {
   /** Packed sequence length the cache is built at. */
   sequenceLength: number
   dataMode: DsparkDataMode
+  /**
+   * The weight format the frozen target is stored in.
+   *
+   * The target only has to be resident in online mode, but the format sets both
+   * its footprint and the rate its forward pass runs at. The drafter itself is
+   * always trained in BF16.
+   */
+  targetWeightFormat: WeightFormatId
   gpu: GpuSpec
   storage: StorageSpec
   /** Cards the run is spread over. */
@@ -103,6 +112,10 @@ export interface DsparkResult {
   mode: DsparkDataMode
   verdict: DsparkVerdict
   shape: DsparkTargetShape
+  /** The weight format the target was costed in. */
+  targetWeightFormat: WeightFormatId
+  /** Bytes for each target weight, including the share of the scale sidecar. */
+  targetBytesPerWeight: number
 
   // --- The target cache, which only the offline mode writes ---------------
   cacheBytesPerToken: number

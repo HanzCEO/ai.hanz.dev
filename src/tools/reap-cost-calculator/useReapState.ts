@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 
 import { GPU_PRESETS, STORAGE_PRESETS } from '@/lib/hardware'
 import type { Provider } from '@/lib/kvcache'
-import type { WeightDtype } from '@/lib/reap'
+import { WEIGHT_DTYPES as REAP_WEIGHT_DTYPES, type WeightDtype } from '@/lib/reap'
 import { useUrlSyncedState, booleanFlag, decimalOrNull, digitsOrNull, enumOf, type UrlSchema } from '@/lib/url-state'
 
 /** Where the model shape comes from. */
@@ -97,7 +97,7 @@ const DEFAULTS: ReapFormInputs = {
 
 const GPU_IDS = GPU_PRESETS.map((gpu) => gpu.id)
 const STORAGE_IDS = STORAGE_PRESETS.map((storage) => storage.id)
-const WEIGHT_DTYPES: WeightDtype[] = ['BF16', 'FP8', 'INT4']
+const WEIGHT_DTYPES: WeightDtype[] = REAP_WEIGHT_DTYPES.map((spec) => spec.id)
 const MODES: InputMode[] = ['hub', 'paste', 'manual']
 
 

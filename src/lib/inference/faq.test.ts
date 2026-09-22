@@ -22,7 +22,7 @@ function wordCount(sentence: string): number {
 
 describe('INFERENCE_FAQ', () => {
   it('keeps the question a reader arrives with first', () => {
-    expect(INFERENCE_FAQ[0].question).toBe('How much GPU memory does FP16 or BF16 inference need?')
+    expect(INFERENCE_FAQ[0].question).toBe('How much GPU memory does inference need?')
   })
 
   it('answers the cache dtype and the two step question', () => {
@@ -72,9 +72,10 @@ describe('INFERENCE_FAQ', () => {
     }
   })
 
-  it('names the two precisions it answers for', () => {
+  it('names the weight formats it answers for', () => {
     const all = INFERENCE_FAQ.map((item) => `${item.question} ${item.answer}`).join(' ')
-    expect(all).toContain('FP16')
     expect(all).toContain('BF16')
+    expect(all).toContain('FP8')
+    expect(all).toContain('MXFP4')
   })
 })

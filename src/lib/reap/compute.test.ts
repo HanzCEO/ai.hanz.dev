@@ -6,9 +6,9 @@ import { loadConfigFixture } from '@/test/fixtures'
 import { reapInputs as inputs } from '@/test/reap'
 import type { RawConfig } from '../model-config'
 
-import { estimateReap } from './compute'
+import { estimateReap, peakTflops } from './compute'
 import { detectMoeShape } from './moe-shape'
-import { WEIGHT_DTYPE_ORDER, bytesPerParam } from './presets'
+import { WEIGHT_DTYPES, WEIGHT_DTYPE_ORDER, bytesPerParam } from './presets'
 import { ReapInputError, type MoeShape } from './types'
 
 const fixture = loadConfigFixture
@@ -264,43 +264,43 @@ describe('estimateReap verdicts', () => {
     expect(result.peakVramBytes).toBeLessThan(result.vramBytes)
   })
 
-  it('reports needs-fp8 when the BF16 block overflows the card but FP8 fits', () => {
+  it('names a narrower format when the BF16 block overflows the card but FP8 fits', () => {
     // DeepSeek V4 Pro has 384 experts of 66M parameters each. One block is about
     // 47 GiB in BF16, which does not fit a 32 GB card, and about 24 GiB in FP8,
     // which does.
     const shape = detectMoeShape(fixture('deepseek-v4-pro')) as MoeShape
     const result = estimateReap(shape, inputs({ gpu: RTX_5090, weightDtype: 'BF16' }))
-    expect(result.verdict).toBe('needs-fp8')
+    expect(result.verdict).toBe('needs-narrower')
     expect(result.perMoELayerBytes).toBeGreaterThan(result.vramBytes)
-    expect(result.bestFittingDtype).toBe('FP8')
-    // One block in FP8 is half its BF16 size.
-    expect(result.bestFittingBlockBytes).toBe(result.perMoELayerBytes / 2)
+    expect(result.bestFittingDtype).toBe('FP8_E4M3')
+    // One block in FP8 is about half its BF16 size.
+    const blockBytes = result.bestFittingBlockBytes ?? 0
+    expect(blockBytes).toBeGreaterThan(0)
+    expect(blockBytes / result.perMoELayerBytes).toBeCloseTo(0.5, 3)
   })
 
-  it('reports needs-int4 when BF16 and FP8 overflow the card but INT4 fits', () => {
-    // DeepSeek-R1 on a 12 GiB RTX 5070: one expert block is about 22.9 GiB in
-    // BF16 and about 12.2 GiB in FP8, so both overflow the card, and about
-    // 6.9 GiB in INT4, which fits. The verdict used to stop at FP8 and report
-    // that no precision fits, which the panel rendered as "No weight precision
-    // makes this expert block fit", while the same card flipped to Fits as soon
-    // as INT4 was selected.
+  it('names the widest format that still fits when the wider ones overflow', () => {
+    // DeepSeek-R1 on a 12 GiB RTX 5070: one expert block overflows the card in
+    // BF16 and in FP8, and fits in NVFP4. The panel used to render the
+    // needs-offload copy while the format picker flipped the same card to Fits
+    // as soon as a 4 bit format was selected.
     const shape = detectMoeShape(fixture('deepseek-r1')) as MoeShape
     const result = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'BF16' }))
-    expect(result.verdict).toBe('needs-int4')
-    expect(result.bestFittingDtype).toBe('INT4')
+    expect(result.verdict).toBe('needs-narrower')
+    expect(result.bestFittingDtype).toBe('NVFP4')
     expect(result.perMoELayerBytes).toBeGreaterThan(result.vramBytes)
     expect(result.bestFittingBlockBytes).toBeLessThan(result.vramBytes)
   })
 
-  it('gives the same model and card a fitting verdict once INT4 is selected', () => {
+  it('gives the same model and card a fitting verdict once that format is selected', () => {
     // The verdict has to agree with the format picker, so the two selections
     // can never disagree about the same run.
     const shape = detectMoeShape(fixture('deepseek-r1')) as MoeShape
     const bf16 = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'BF16' }))
-    const int4 = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'INT4' }))
-    expect(bf16.verdict).toBe('needs-int4')
-    expect(int4.verdict).toBe('fits')
-    expect(int4.perMoELayerBytes).toBe(bf16.bestFittingBlockBytes)
+    const nvfp4 = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'NVFP4' }))
+    expect(bf16.verdict).toBe('needs-narrower')
+    expect(nvfp4.verdict).toBe('fits')
+    expect(nvfp4.perMoELayerBytes).toBe(bf16.bestFittingBlockBytes)
   })
 
   it('reports needs-offload when even the narrowest format overflows', () => {
@@ -320,7 +320,7 @@ describe('estimateReap verdicts', () => {
 
   it('reports fits when the selected format is already the narrow one', () => {
     const shape = detectMoeShape(fixture('kimi-k2')) as MoeShape
-    const result = estimateReap(shape, inputs({ gpu: RTX_5090, weightDtype: 'FP8' }))
+    const result = estimateReap(shape, inputs({ gpu: RTX_5090, weightDtype: 'FP8_E4M3' }))
     expect(result.verdict).toBe('fits')
   })
 
@@ -426,9 +426,10 @@ describe('estimateReap storage and memory', () => {
 
   it('streams fewer bytes in a narrower format', () => {
     const bf16 = estimateReap(shape, inputs({ weightDtype: 'BF16' }))
-    const fp8 = estimateReap(shape, inputs({ weightDtype: 'FP8' }))
-    expect(fp8.weightBytes).toBe(bf16.weightBytes / 2)
-    expect(fp8.perMoELayerBytes).toBe(bf16.perMoELayerBytes / 2)
+    const fp8 = estimateReap(shape, inputs({ weightDtype: 'FP8_E4M3' }))
+    // FP8 is half the BF16 payload plus a small scale sidecar.
+    expect(fp8.weightBytes / bf16.weightBytes).toBeCloseTo(0.5, 3)
+    expect(fp8.perMoELayerBytes / bf16.perMoELayerBytes).toBeCloseTo(0.5, 3)
   })
 
   it('grows the activation buffer with the micro batch size', () => {
@@ -500,9 +501,37 @@ describe('estimateReap input validation', () => {
 })
 
 describe('bytesPerParam', () => {
-  it('gives the byte width of each format', () => {
+  it('gives the byte width of each format, including the scale sidecar', () => {
     expect(bytesPerParam('BF16')).toBe(2)
-    expect(bytesPerParam('FP8')).toBe(1)
-    expect(bytesPerParam('INT4')).toBe(0.5)
+    expect(bytesPerParam('FP8_E4M3')).toBeCloseTo(1 + 1 / 16384, 10)
+    expect(bytesPerParam('NVFP4')).toBeCloseTo(0.5625, 10)
+    expect(bytesPerParam('MXFP4')).toBeCloseTo(0.53125, 10)
+    expect(bytesPerParam('INT4')).toBeCloseTo(0.515625, 10)
+  })
+
+  it('offers MXFP4 and NVFP4 with their scale aware byte cost', () => {
+    const ids = WEIGHT_DTYPES.map((spec) => spec.id)
+    expect(ids).toContain('MXFP4')
+    expect(ids).toContain('NVFP4')
+    expect(WEIGHT_DTYPES.find((spec) => spec.id === 'MXFP4')?.bytes).toBeCloseTo(0.53125, 10)
+    expect(WEIGHT_DTYPES.find((spec) => spec.id === 'NVFP4')?.bytes).toBeCloseTo(0.5625, 10)
+  })
+})
+
+describe('peakTflops', () => {
+  it('uses the FP4 path for a 4 bit format on a card that has one', () => {
+    expect(peakTflops('MXFP4', RTX_5090)).toBe(RTX_5090.fp4DenseTflops)
+    expect(peakTflops('NVFP4', RTX_5090)).toBe(RTX_5090.fp4DenseTflops)
+    expect(peakTflops('INT4', RTX_5090)).toBe(RTX_5090.fp4DenseTflops)
+  })
+
+  it('falls back to the FP8 rate when the card has no FP4 path', () => {
+    expect(H200.fp4DenseTflops).toBeNull()
+    expect(peakTflops('MXFP4', H200)).toBe(H200.fp8DenseTflops)
+  })
+
+  it('uses the FP8 path for an FP8 format and BF16 otherwise', () => {
+    expect(peakTflops('FP8_E4M3', H200)).toBe(H200.fp8DenseTflops)
+    expect(peakTflops('BF16', RTX_5090)).toBe(RTX_5090.bf16DenseTflops)
   })
 })

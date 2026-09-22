@@ -15,7 +15,7 @@ const LEVEL_LABELS: Record<SupportLevel, string> = {
 /**
  * Tags an option with how well it is grounded, so a dropdown never asserts
  * support without saying why. Shared by the KV cache dtype picker and the REAP
- * precision picker.
+ * weight format picker.
  */
 export default function SupportTag({
   level,

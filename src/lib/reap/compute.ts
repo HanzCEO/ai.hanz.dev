@@ -1,4 +1,5 @@
 import type { GpuSpec } from '../hardware'
+import { isFourBitFormat, isFp8Format, weightFormatLabel } from '../weight-format'
 
 import {
   RUNTIME_OVERHEAD_BYTES,
@@ -31,12 +32,20 @@ const ACTIVATION_FACTOR = 8
 /** Above this the remaining expert bank stops resembling the original model. */
 const MAX_PRUNE_RATIO = 0.9
 
-/** The dense tensor rate the calibration forward pass actually runs at. */
-function peakTflops(dtype: WeightDtype, gpu: GpuSpec): number {
-  // A quantised checkpoint is dequantised per block, so it runs at the rate of
-  // the nearest supported tensor format rather than at the BF16 rate.
-  if ((dtype === 'FP8' || dtype === 'INT4') && gpu.fp8DenseTflops !== null) {
-    return gpu.fp8DenseTflops
+/**
+ * The dense tensor rate the calibration forward pass actually runs at.
+ *
+ * A quantised checkpoint is dequantised per block, so it runs at the rate of
+ * the nearest supported tensor format rather than at the BF16 rate. A 4 bit
+ * format uses the FP4 path where the card has one, and falls back to the FP8
+ * rate and then the BF16 rate where it does not.
+ */
+export function peakTflops(dtype: WeightDtype, gpu: GpuSpec): number {
+  if (isFourBitFormat(dtype)) {
+    return gpu.fp4DenseTflops ?? gpu.fp8DenseTflops ?? gpu.bf16DenseTflops
+  }
+  if (isFp8Format(dtype)) {
+    return gpu.fp8DenseTflops ?? gpu.bf16DenseTflops
   }
   return gpu.bf16DenseTflops
 }
@@ -103,6 +112,7 @@ function notMoeResult(inputs: ReapInputs): ReapResult {
     vramBytes: inputs.gpu.vramGiB * GIB,
     bestFittingDtype: null,
     bestFittingBlockBytes: null,
+    weightDtype: inputs.weightDtype,
     pruneRatio: inputs.pruneRatio,
     keptExperts: 0,
     removedExperts: 0,
@@ -179,12 +189,11 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
     bestFittingDtype === null ? null : blockBytesForDtype(bestFittingDtype)
 
   // The verdict follows the same search, so it can never claim that no format
-  // fits while it also names one that does. Each step is one format narrower
-  // than the step above it.
+  // fits while it also names one that does. A narrower format that fits makes
+  // the run possible, and the results panel names that format.
   let verdict: ReapVerdict
   if (peakVramBytes <= vramBytes) verdict = 'fits'
-  else if (peakForDtype('FP8') <= vramBytes) verdict = 'needs-fp8'
-  else if (peakForDtype('INT4') <= vramBytes) verdict = 'needs-int4'
+  else if (bestFittingDtype !== null) verdict = 'needs-narrower'
   else verdict = 'needs-offload'
 
   // --- What pruning leaves behind -----------------------------------------
@@ -255,7 +264,7 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
     },
     {
       label: 'One expert block in VRAM',
-      detail: `The largest resident set is 1 expert block. ${shape.routedExperts.toLocaleString('en-US')} experts plus attention and the router gives ${perMoELayerParams.toLocaleString('en-US')} parameters. That is ${(perMoELayerBytes / GIB).toFixed(1)} GiB at ${inputs.weightDtype}.`,
+      detail: `The largest resident set is 1 expert block. ${shape.routedExperts.toLocaleString('en-US')} experts plus attention and the router gives ${perMoELayerParams.toLocaleString('en-US')} parameters. That is ${(perMoELayerBytes / GIB).toFixed(1)} GiB at ${weightFormatLabel(inputs.weightDtype)}.`,
     },
     {
       label: 'After pruning',
@@ -313,6 +322,7 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
     vramBytes,
     bestFittingDtype,
     bestFittingBlockBytes,
+    weightDtype: inputs.weightDtype,
     pruneRatio: ratio,
     keptExperts,
     removedExperts,

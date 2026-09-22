@@ -2,16 +2,7 @@ import type { GpuSpec } from '../hardware'
 import type { DtypeId } from '../kvcache'
 import type { RawConfig } from '../model-config'
 import type { ModelShape } from '../model-shape'
-
-/**
- * The two precisions this calculator answers for.
- *
- * FP16 and BF16 both take two bytes for each weight, so the memory footprint is
- * identical and only the numeric range differs. A model served in either one
- * needs the same hardware, which is why they share a single code path and a
- * single bytes-per-weight constant.
- */
-export type InferencePrecision = 'FP16' | 'BF16'
+import type { WeightFormatId, WeightQuantization } from '../weight-format'
 
 /**
  * The speculative decoding head a model is served with.
@@ -36,7 +27,13 @@ export type InferenceVerdict =
 export interface InferenceInputs {
   /** The model config, which the KV cache engine reads for the cache shape. */
   config: RawConfig
-  precision: InferencePrecision
+  /**
+   * The weight format to cost the checkpoint in.
+   *
+   * Absent means the calculator reads the format the checkpoint publishes,
+   * which is the default. A value forces that one format on both buckets.
+   */
+  weightFormat?: WeightFormatId
   /** Tokens in each sequence. */
   contextLength: number
   /** Sequences served at the same time. */
@@ -51,11 +48,10 @@ export interface InferenceInputs {
    * The dtype the KV cache is held in, for example FP8.
    *
    * A cache is far smaller than the weights, but it is the term that grows with
-   * the context, so its dtype can decide which card fits. Absent means the cache
-   * is held in the weight precision.
+   * the context, so its dtype can decide which card fits. Absent means BF16.
    */
   kvCacheDtype?: DtypeId
-  /** The dtype a sparse indexer cache is held in. Absent means the weight precision. */
+  /** The dtype a sparse indexer cache is held in. Absent means BF16. */
   indexerDtype?: DtypeId
   /**
    * The speculative decoding head the model is served with.
@@ -92,9 +88,18 @@ export interface InferenceCandidate {
 
 export interface InferenceResult {
   shape: ModelShape
-  precision: InferencePrecision
-  /** Bytes for each weight. Two for both precisions. */
-  bytesPerWeight: number
+  /** The format the whole checkpoint is named in, before the expert split. */
+  weightFormat: WeightFormatId
+  /** The split the answer was costed with, which is mixed when the buckets differ. */
+  weightQuantization: WeightQuantization
+  /** Bytes for every weight in the checkpoint. */
+  weightsBytes: number
+  /** Bytes held by the routed and shared experts. */
+  expertWeightBytes: number
+  /** Bytes held by attention, the dense feed forward, the router, and the embeddings. */
+  denseWeightBytes: number
+  /** Bytes one token reads on the forward pass, the figure the roofline divides. */
+  activeBytesPerToken: number
   /** The dtype the KV cache was costed in. */
   kvCacheDtype: DtypeId
   /** The dtype a sparse indexer cache was costed in. */
@@ -107,7 +112,6 @@ export interface InferenceResult {
   maxGpus: number
 
   // --- Memory -------------------------------------------------------------
-  weightsBytes: number
   kvCacheBytes: number
   /** Bytes for each token in each sequence, summed over every layer. */
   kvBytesPerToken: number
@@ -164,7 +168,7 @@ export interface InferenceResult {
 
 /** The estimator input a validation error belongs to, when it has one. */
 export type InferenceInputField =
-  | 'precision'
+  | 'weightFormat'
   | 'mtpHead'
   | 'contextLength'
   | 'sequences'

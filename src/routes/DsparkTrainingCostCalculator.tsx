@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 import FaqSection from '@/components/faq/FaqSection'
 import { ToolBreadcrumb, ToolHeader } from '@/components/layout/ToolPage'
@@ -18,6 +18,7 @@ import {
   type DsparkInputs,
   type DsparkResult,
 } from '@/lib/dspark'
+import { DEFAULT_WEIGHT_FORMAT } from '@/lib/weight-format'
 import DsparkForm from '@/tools/dspark-training-cost-calculator/DsparkForm'
 import DsparkResults from '@/tools/dspark-training-cost-calculator/DsparkResults'
 import { useDsparkShape } from '@/tools/dspark-training-cost-calculator/useDsparkShape'
@@ -30,7 +31,7 @@ function count(value: string): number {
 }
 
 export default function DsparkTrainingCostCalculator() {
-  const { inputs, update } = useDsparkState()
+  const { inputs, update, seeded } = useDsparkState()
   const shapeState = useDsparkShape(inputs)
 
   const gpu: GpuSpec = findGpu(inputs.gpuId) ?? (findGpu(DEFAULT_GPU_ID) as GpuSpec)
@@ -62,6 +63,12 @@ export default function DsparkTrainingCostCalculator() {
       markovRank: count(inputs.markovRank),
       sequenceLength,
       dataMode: inputs.dataMode,
+      // Auto follows the target checkpoint. A named format forces one format on
+      // the frozen target.
+      targetWeightFormat:
+        inputs.targetWeightFormat === 'auto'
+          ? (shapeState.suggestedWeightFormat ?? DEFAULT_WEIGHT_FORMAT)
+          : inputs.targetWeightFormat,
       gpu,
       storage,
       gpuCount: count(inputs.gpuCount),
@@ -85,7 +92,28 @@ export default function DsparkTrainingCostCalculator() {
         invalidField: error instanceof DsparkInputError ? error.field : null,
       }
     }
-  }, [shapeState.status, shapeState.shape, inputs, gpu, storage])
+  }, [shapeState.status, shapeState.shape, shapeState.suggestedWeightFormat, inputs, gpu, storage])
+
+  // Open a newly selected target on the format its checkpoint ships in. A
+  // shared link that names a format keeps its own choice.
+  const formatSeededFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (shapeState.status !== 'ready') return
+    const selection = `${inputs.mode}:${inputs.modelId}`
+    if (formatSeededFor.current === selection) return
+    formatSeededFor.current = selection
+    if (seeded.current.targetWeights) return
+    if (shapeState.suggestedWeightFormat) {
+      update({ targetWeightFormat: shapeState.suggestedWeightFormat })
+    }
+  }, [
+    shapeState.status,
+    shapeState.suggestedWeightFormat,
+    inputs.mode,
+    inputs.modelId,
+    seeded,
+    update,
+  ])
 
   return (
     <div className="flex flex-col gap-10">

@@ -1,3 +1,5 @@
+import { bytesPerWeight, getWeightFormat } from '../weight-format'
+
 import type { WeightDtype } from './types'
 
 export interface WeightDtypeSpec {
@@ -7,14 +9,32 @@ export interface WeightDtypeSpec {
   note: string
 }
 
-export const WEIGHT_DTYPES: WeightDtypeSpec[] = [
-  { id: 'BF16', label: 'BF16', bytes: 2, note: 'Full precision weights. This precision gives the largest expert block in VRAM.' },
-  { id: 'FP8', label: 'FP8', bytes: 1, note: 'Half the bytes of BF16. It needs a Blackwell, Hopper, CDNA 3, or RDNA 4 GPU.' },
-  { id: 'INT4', label: 'INT4', bytes: 0.5, note: 'A quarter of the bytes of BF16. It needs a checkpoint that is already quantised.' },
+/**
+ * The formats the calibration can read, from the widest to the narrowest.
+ *
+ * The order is the fitting search order, so the first format that fits is the
+ * highest precision the card can hold. FP16 is left out because it is the same
+ * size as BF16, and INT8 is left out because no published mixture of experts
+ * checkpoint stores its experts that way. A 4 bit format carries its scale
+ * sidecar in the byte figure, so MXFP4 costs 4.25 bits for each weight and not
+ * four.
+ */
+export const WEIGHT_DTYPE_ORDER: WeightDtype[] = [
+  'BF16',
+  'FP8_E4M3',
+  'NVFP4',
+  'MXFP4',
+  'INT4',
 ]
 
+export const WEIGHT_DTYPES: WeightDtypeSpec[] = WEIGHT_DTYPE_ORDER.map((id) => {
+  const spec = getWeightFormat(id)
+  return { id, label: spec.label, bytes: spec.bytes, note: spec.note }
+})
+
+/** Bytes for each parameter in a format, including the share of the scale sidecar. */
 export function bytesPerParam(dtype: WeightDtype): number {
-  return WEIGHT_DTYPES.find((spec) => spec.id === dtype)?.bytes ?? 2
+  return bytesPerWeight(dtype)
 }
 
 export interface CalibrationPreset {
@@ -86,5 +106,3 @@ export const DEFAULT_MICRO_BATCH = 1
 /** The framework, CUDA context, and kernels that are resident but uncounted. */
 export const RUNTIME_OVERHEAD_BYTES = 1.5 * 1024 ** 3
 
-/** Weight formats from widest to narrowest, for the fitting search. */
-export const WEIGHT_DTYPE_ORDER: WeightDtype[] = ['BF16', 'FP8', 'INT4']

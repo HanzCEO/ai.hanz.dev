@@ -6,6 +6,7 @@ import { mtpHeadSpec, type InferenceCandidate, type InferenceResult } from '@/li
 import type { ModelShape } from '@/lib/model-shape'
 import { SUPPORT_URL } from '@/lib/seo'
 import type { ConfigSourceState } from '@/lib/use-config-source'
+import { weightFormatLabel } from '@/lib/weight-format'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,7 +60,7 @@ export default function InferenceResults({
   const copy = useCallback(async () => {
     if (!result || !result.recommended) return
     const lines = [
-      `${modelLabel ?? result.shape.modelType} in ${result.precision}: ${configurationLabel(result.recommended)}`,
+      `${modelLabel ?? result.shape.modelType} in ${weightFormatLabel(result.weightFormat)}: ${configurationLabel(result.recommended)}`,
       `weights ${formatExact(result.weightsBytes)} bytes`,
       `kv cache ${formatExact(result.kvCacheBytes)} bytes`,
       `per card ${formatExact(result.recommended.perCardBytes)} bytes of ${formatExact(result.recommended.usableBytes)} usable`,
@@ -148,6 +149,8 @@ export default function InferenceResults({
   // The row behind the selected head, so the page can name it in prose rather
   // than repeat the label in every branch below.
   const mtp = result.mtpHead === 'none' ? null : (mtpHeadSpec(result.mtpHead) ?? null)
+  const weightLabel = weightFormatLabel(result.weightFormat)
+  const mixed = result.weightQuantization.mixed
 
   return (
     <div className="flex flex-col gap-4" aria-live="polite">
@@ -188,8 +191,9 @@ export default function InferenceResults({
               </p>
             )}
             <p className="mt-2">
-              Three options remain. Quantize the weights to FP8 or INT4. Offload part of the model
-              to host memory. Or raise the maximum GPU count above the limit set in the form.
+              Three options remain. Quantize the weights to FP8 or a 4 bit format. Offload part of
+              the model to host memory. Or raise the maximum GPU count above the limit set in the
+              form.
             </p>
           </AlertDescription>
         </Alert>
@@ -224,7 +228,7 @@ export default function InferenceResults({
           <p className="text-sm">
             {recommended ? (
               <>
-                <strong>{name}</strong> in <strong>{result.precision}</strong> needs{' '}
+                <strong>{name}</strong> in <strong>{weightLabel}</strong> needs{' '}
                 <strong>{configurationLabel(recommended)}</strong> for{' '}
                 {formatExact(shape.totalParams)} parameters. The weights take{' '}
                 {formatBytes(result.weightsBytes).text} and the cache takes{' '}
@@ -241,7 +245,7 @@ export default function InferenceResults({
               </>
             ) : (
               <>
-                <strong>{name}</strong> in <strong>{result.precision}</strong> does not fit any
+                <strong>{name}</strong> in <strong>{weightLabel}</strong> does not fit any
                 configuration in this list. The run needs{' '}
                 {formatBytes(result.totalBytes).text} in total, which is{' '}
                 {formatBytes(result.weightsBytes).text} of weights and{' '}
@@ -250,7 +254,24 @@ export default function InferenceResults({
             )}
           </p>
 
+          {/* A mixed checkpoint names two formats, so both are shown rather than one label. */}
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
+            <div className="flex flex-col">
+              <dt className="text-muted-foreground text-xs">Weight format</dt>
+              <dd className="tabular-nums">{weightLabel}</dd>
+            </div>
+            {mixed && (
+              <>
+                <div className="flex flex-col">
+                  <dt className="text-muted-foreground text-xs">Expert format</dt>
+                  <dd className="tabular-nums">{weightFormatLabel(result.weightQuantization.experts)}</dd>
+                </div>
+                <div className="flex flex-col">
+                  <dt className="text-muted-foreground text-xs">Dense format</dt>
+                  <dd className="tabular-nums">{weightFormatLabel(result.weightQuantization.dense)}</dd>
+                </div>
+              </>
+            )}
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">Resident weights</dt>
               <dd className="tabular-nums">{formatBytes(result.weightsBytes).text}</dd>

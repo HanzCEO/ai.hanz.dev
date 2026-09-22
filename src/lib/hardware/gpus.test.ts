@@ -74,6 +74,9 @@ const NO_FP8_IDS = [
   'rx-6600',
 ]
 
+/** Architectures with a native FP4 dense tensor path. */
+const FP4_GENERATIONS = ['Blackwell Ultra', 'Blackwell', 'RDNA 4']
+
 /** Architectures that do have an FP8 tensor path. */
 const FP8_IDS = [
   'b300',
@@ -122,6 +125,33 @@ describe('GPU_PRESETS coverage', () => {
       const value = findGpu(id)?.fp8DenseTflops
       expect(value, `${id} should have an FP8 path`).not.toBeNull()
       expect(value ?? 0).toBeGreaterThan(0)
+    }
+  })
+
+  it('marks FP4 support by architecture', () => {
+    for (const gpu of GPU_PRESETS) {
+      if (FP4_GENERATIONS.includes(gpu.generation)) {
+        expect(gpu.fp4DenseTflops, `${gpu.id} should have an FP4 path`).not.toBeNull()
+        expect(gpu.fp4DenseTflops ?? 0, gpu.id).toBeGreaterThan(0)
+      } else {
+        expect(gpu.fp4DenseTflops, `${gpu.id} should have no FP4 path`).toBeNull()
+      }
+    }
+  })
+
+  it('runs FP4 at twice the FP8 rate where both paths exist', () => {
+    for (const gpu of GPU_PRESETS) {
+      if (gpu.fp4DenseTflops === null) continue
+      expect(gpu.fp8DenseTflops, gpu.id).not.toBeNull()
+      expect(gpu.fp4DenseTflops, gpu.id).toBe((gpu.fp8DenseTflops ?? 0) * 2)
+    }
+  })
+
+  it('never claims an FP4 path on a card with no FP8 path', () => {
+    for (const gpu of GPU_PRESETS) {
+      if (gpu.fp8DenseTflops === null) {
+        expect(gpu.fp4DenseTflops, gpu.id).toBeNull()
+      }
     }
   })
 

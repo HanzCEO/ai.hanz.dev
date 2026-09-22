@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, Cpu, HardDrive, Loader2, MemoryStick } from 'luci
 import { formatBytes, formatDuration, formatExact } from '@/lib/format'
 import type { GpuSpec } from '@/lib/hardware'
 import type { DsparkResult, DsparkVerdict } from '@/lib/dspark'
+import { weightFormatLabel } from '@/lib/weight-format'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -234,7 +235,8 @@ export default function DsparkResults({
                     <>
                       Online capture writes no target cache. The run needs{' '}
                       {formatBytes(result.targetWeightBytes).text} of VRAM for the target weights
-                      instead. The VRAM verdict below accounts for that.
+                      in {weightFormatLabel(result.targetWeightFormat)} instead. The VRAM verdict
+                      below accounts for that.
                     </>
                   )}
                 </p>

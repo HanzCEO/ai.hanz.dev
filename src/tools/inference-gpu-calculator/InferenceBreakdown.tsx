@@ -1,5 +1,6 @@
 import { formatBytes, formatExact } from '@/lib/format'
 import { mtpHeadSpec, type InferenceResult } from '@/lib/inference'
+import { weightFormatLabel } from '@/lib/weight-format'
 
 import Breakdown, { BreakdownPanel, Row } from '@/components/breakdown/Breakdown'
 
@@ -48,6 +49,19 @@ export default function InferenceBreakdown({ result }: { result: InferenceResult
 
           <BreakdownPanel value="memory" label="Memory in detail">
             <dl className="text-sm">
+              <Row label="Weight format" value={weightFormatLabel(result.weightFormat)} />
+              {result.weightQuantization.mixed && (
+                <>
+                  <Row
+                    label="Expert format"
+                    value={weightFormatLabel(result.weightQuantization.experts)}
+                  />
+                  <Row
+                    label="Dense format"
+                    value={weightFormatLabel(result.weightQuantization.dense)}
+                  />
+                </>
+              )}
               <Row label="Resident weights" value={formatBytes(result.weightsBytes).text} />
               <Row
                 label={`KV cache in ${result.kvCacheDtype}`}

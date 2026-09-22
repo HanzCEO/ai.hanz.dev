@@ -1,5 +1,6 @@
 import { formatBytes } from '@/lib/format'
 import type { DsparkResult } from '@/lib/dspark'
+import { weightFormatLabel } from '@/lib/weight-format'
 
 import Breakdown, { BreakdownPanel, Row } from '@/components/breakdown/Breakdown'
 
@@ -50,7 +51,10 @@ export default function DsparkBreakdown({ result }: { result: DsparkResult }) {
               ],
               ['Confidence head', formatBytes(result.draftConfidenceParams * 2).text],
               ['Total in bf16', formatBytes(result.draftWeightBytes).text],
-              ['Shared and frozen', formatBytes(result.shape.totalParams * 2).text],
+              [
+                'Shared and frozen',
+                formatBytes(result.shape.totalParams * result.targetBytesPerWeight).text,
+              ],
             ]}
             note="The shared line is the target embedding and the language model head. The run loads them for the forward pass but never updates them. They are therefore not part of the trained parameter count."
           />
@@ -61,9 +65,12 @@ export default function DsparkBreakdown({ result }: { result: DsparkResult }) {
               ['Drafter weights in bf16', formatBytes(result.draftWeightBytes).text],
               ['Optimizer state', formatBytes(result.optimizerBytes).text],
               ['Gradients', formatBytes(result.gradientBytes).text],
+              ['Target weight format', weightFormatLabel(result.targetWeightFormat)],
               [
                 'Resident target',
-                offline ? 'not in VRAM' : formatBytes(result.targetWeightBytes).text,
+                offline
+                  ? 'not in VRAM'
+                  : `${formatBytes(result.targetWeightBytes).text} in ${weightFormatLabel(result.targetWeightFormat)}`,
               ],
               ['Model state over the whole run', formatBytes(result.modelStateBytes).text],
               [

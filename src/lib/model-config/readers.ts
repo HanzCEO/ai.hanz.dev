@@ -126,5 +126,16 @@ export function dtypeNameToBytes(name: string | undefined): number | undefined {
   if (normalized.includes('bfloat16') || normalized === 'bf16') return 2
   if (normalized.includes('float8') || normalized === 'fp8') return 1
   if (normalized.includes('int8')) return 1
+  // A 4 bit element is half a byte. The block scale is added by the size
+  // formula that actually packs the cache, so it is not counted here.
+  if (
+    normalized.includes('fp4') ||
+    normalized.includes('mxfp4') ||
+    normalized.includes('nvfp4') ||
+    normalized.includes('int4') ||
+    normalized.includes('4bit')
+  ) {
+    return 0.5
+  }
   return undefined
 }

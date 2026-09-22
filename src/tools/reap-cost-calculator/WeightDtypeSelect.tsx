@@ -1,6 +1,7 @@
 import { WEIGHT_DTYPES, type WeightDtype } from '@/lib/reap'
 import type { GpuSpec } from '@/lib/hardware'
 import type { SupportLevel } from '@/lib/support'
+import { isFourBitFormat, isFp8Format, weightFormatLabel } from '@/lib/weight-format'
 
 import SupportTag from '@/components/ui/support-tag'
 import Marquee from '@/components/ui/marquee'
@@ -18,19 +19,23 @@ interface Tag {
 }
 
 /**
- * Grounds each precision in what the card can actually do. FP8 is only offered
- * as supported where the architecture has a real FP8 tensor path, which is
- * Blackwell, Hopper, CDNA 3, and RDNA 4.
+ * Grounds each format in what the card can actually do.
+ *
+ * FP8 needs an FP8 tensor path, which is Blackwell, Hopper, Ada, CDNA 3, and
+ * RDNA 4. A 4 bit format needs an FP4 tensor path, which is Blackwell and
+ * RDNA 4. Where the card has no FP4 path, the block is still a quarter of its
+ * BF16 size, but the calibration dequantizes it and runs at the FP8 or BF16
+ * rate.
  */
 function tagFor(dtype: WeightDtype, gpu: GpuSpec): Tag {
-  if (dtype === 'BF16') {
+  if (dtype === 'BF16' || dtype === 'FP16') {
     return {
       level: 'supported',
-      reason: 'This is the precision of most published checkpoints. It runs on every GPU in the list.',
+      reason: 'This is the format of most published checkpoints. It runs on every GPU in the list.',
     }
   }
 
-  if (dtype === 'FP8') {
+  if (isFp8Format(dtype)) {
     if (gpu.fp8DenseTflops === null) {
       return {
         level: 'unsupported',
@@ -43,9 +48,22 @@ function tagFor(dtype: WeightDtype, gpu: GpuSpec): Tag {
     }
   }
 
+  if (isFourBitFormat(dtype)) {
+    if (gpu.fp4DenseTflops === null) {
+      return {
+        level: 'untested',
+        reason: `${gpu.label} has no FP4 tensor path, so the calibration dequantizes the block and runs at the FP8 or BF16 rate.`,
+      }
+    }
+    return {
+      level: 'supported',
+      reason: `This cuts the resident expert block to about a quarter. It runs at ${gpu.fp4DenseTflops.toLocaleString('en-US')} TFLOPS dense on ${gpu.label}.`,
+    }
+  }
+
   return {
     level: 'untested',
-    reason: 'It needs a checkpoint that is already quantised to 4 bits. No published recipe calibrates one.',
+    reason: 'It needs a checkpoint that is already quantised to this format.',
   }
 }
 
@@ -67,7 +85,7 @@ export default function WeightDtypeSelect({
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="text-sm font-medium">
-        Weight precision
+        Weight format
       </label>
       <Select
         value={value}
@@ -76,7 +94,7 @@ export default function WeightDtypeSelect({
         }}
       >
         <SelectTrigger id={id} className="w-full">
-          <SelectValue>{value}</SelectValue>
+          <SelectValue>{weightFormatLabel(value)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {WEIGHT_DTYPES.map((spec) => {

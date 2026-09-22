@@ -23,7 +23,7 @@ interface InferenceLayersProps {
   cacheResults: ReactNode
   /** What step one decided, shown once it is folded away. */
   cacheSummary: ReactNode
-  /** Step two: the precision, the headroom and the card limit. */
+  /** Step two: the weight format, the headroom and the card limit. */
   gpuForm: ReactNode
   /** Step two's answer. */
   gpuResults: ReactNode
@@ -62,7 +62,7 @@ export default function InferenceLayers({
       <StepSection
         step={2}
         title="GPU configuration"
-        description="Set the precision, the MTP head, and the memory you hold back. The calculator then tests every card at every card count."
+        description="Set the weight format, the MTP head, and the memory you hold back. The calculator then tests every card at every card count."
         open={gpuOpen}
         onOpenChange={onGpuOpenChange}
         disabled={!gpuReady}

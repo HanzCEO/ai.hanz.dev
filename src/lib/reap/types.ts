@@ -1,7 +1,15 @@
 import type { GpuSpec, StorageSpec } from '../hardware'
+import type { WeightFormatId } from '../weight-format'
 
-/** Weight precision the calibration pass reads and the pruned model is saved in. */
-export type WeightDtype = 'BF16' | 'FP8' | 'INT4'
+/**
+ * Weight format the calibration pass reads and the pruned model is saved in.
+ *
+ * The ids are shared with every other calculator, so a checkpoint that
+ * publishes MXFP4 or NVFP4 is named the same way here as it is on the inference
+ * page. The calibration reads the whole checkpoint, but the VRAM peak is one
+ * expert block, so the expert bucket is the one that decides the fit.
+ */
+export type WeightDtype = WeightFormatId
 
 /** The MoE shape a config describes, in parameter counts. */
 export interface MoeShape {
@@ -60,7 +68,7 @@ export interface ReapInputs {
   pruneRatio: number
   gpu: GpuSpec
   storage: StorageSpec
-  /** Weight precision the calibration pass reads. */
+  /** Weight format the calibration pass reads. */
   weightDtype: WeightDtype
   /** Model factory utilisation, between 0.01 and 1. */
   mfu: number
@@ -77,10 +85,8 @@ export interface ReapInputs {
 export type ReapVerdict =
   | 'not-moe'
   | 'fits'
-  /** BF16 overflows the card but the FP8 block fits it. */
-  | 'needs-fp8'
-  /** BF16 and FP8 overflow the card but the INT4 block fits it. */
-  | 'needs-int4'
+  /** The selected format overflows the card, but a narrower format fits it. */
+  | 'needs-narrower'
   /** No weight format in the fitting search holds one expert block. */
   | 'needs-offload'
 
@@ -112,12 +118,14 @@ export interface ReapResult {
   vramBytes: number
   /**
    * The widest weight format whose block fits, or null when none does. The
-   * search runs from BF16 down to INT4, so this is the highest precision the
-   * card can hold and the format the verdict names.
+   * search runs from the widest format to the narrowest, so this is the highest
+   * precision the card can hold and the format the verdict names.
    */
   bestFittingDtype: WeightDtype | null
   /** One expert block in that format, or null when no format fits. */
   bestFittingBlockBytes: number | null
+  /** The format the calibration was costed in, which is what the reader selected. */
+  weightDtype: WeightDtype
 
   pruneRatio: number
   keptExperts: number

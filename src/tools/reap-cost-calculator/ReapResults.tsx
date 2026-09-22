@@ -2,7 +2,8 @@ import { AlertTriangle, Clock, HardDrive, Loader2, Scissors } from 'lucide-react
 
 import type { GpuSpec } from '@/lib/hardware'
 import { formatBytes, formatDuration, formatExact } from '@/lib/format'
-import type { ReapResult, ReapVerdict } from '@/lib/reap'
+import { bytesPerParam, type ReapResult, type ReapVerdict } from '@/lib/reap'
+import { isFourBitFormat, weightFormatLabel } from '@/lib/weight-format'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,15 +14,21 @@ import type { ReapShapeState } from './useReapShape'
 const VERDICT_LABEL: Record<ReapVerdict, string> = {
   'not-moe': 'Not applicable',
   fits: 'Fits',
-  'needs-fp8': 'Needs FP8',
-  'needs-int4': 'Needs INT4',
+  'needs-narrower': 'Needs a narrower format',
   'needs-offload': 'Needs offloading',
+}
+
+/** The badge label, which names the format when a narrower one would hold the block. */
+function verdictLabel(result: ReapResult): string {
+  if (result.verdict === 'needs-narrower' && result.bestFittingDtype) {
+    return `Needs ${weightFormatLabel(result.bestFittingDtype)}`
+  }
+  return VERDICT_LABEL[result.verdict]
 }
 
 function verdictClass(verdict: ReapVerdict): string {
   if (verdict === 'fits') return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-  if (verdict === 'needs-fp8') return 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-  if (verdict === 'needs-int4') return 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+  if (verdict === 'needs-narrower') return 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
   if (verdict === 'needs-offload') return 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
   return ''
 }
@@ -31,8 +38,8 @@ function verdictClass(verdict: ReapVerdict): string {
  * format fits.
  *
  * The verdict and the fitting search are derived together, so a verdict of
- * needs-fp8 or needs-int4 always carries a figure. The null check keeps the
- * panel from printing a zero where the engine reported absence.
+ * needs-narrower always carries a format. The null check keeps the panel from
+ * printing a zero where the engine reported absence.
  */
 function verdictSentence(result: ReapResult): string {
   const memory = formatBytes(result.vramBytes).text
@@ -40,13 +47,10 @@ function verdictSentence(result: ReapResult): string {
   if (result.verdict === 'fits') {
     return `One expert block fits in ${memory}.`
   }
-  if (block !== null && result.verdict === 'needs-fp8') {
-    return `One expert block fits only in FP8, at ${formatBytes(block).text}.`
+  if (block !== null && result.verdict === 'needs-narrower' && result.bestFittingDtype) {
+    return `One expert block fits only in ${weightFormatLabel(result.bestFittingDtype)}, at ${formatBytes(block).text}.`
   }
-  if (block !== null && result.verdict === 'needs-int4') {
-    return `One expert block fits only in INT4, at ${formatBytes(block).text}.`
-  }
-  return `One expert block does not fit in ${memory}, even at the narrowest weight precision.`
+  return `One expert block does not fit in ${memory}, even at the narrowest weight format.`
 }
 
 interface ReapResultsProps {
@@ -144,7 +148,7 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
               </p>
             </div>
             <Badge className={verdictClass(result.verdict)}>
-              {VERDICT_LABEL[result.verdict]} · {gpu.label}
+              {verdictLabel(result)} · {gpu.label}
             </Badge>
           </div>
 
@@ -206,22 +210,16 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
                   expert block plus a {formatBytes(result.activationBytes).text} activation buffer.
                   The peak is therefore {formatBytes(result.peakVramBytes).text}.
                 </p>
-                {result.verdict === 'needs-fp8' && result.bestFittingBlockBytes !== null && (
-                  <p className="text-sm text-amber-700 dark:text-amber-400">
-                    Change the weight precision to FP8. The expert block then needs{' '}
-                    {formatBytes(result.bestFittingBlockBytes).text}, and the run becomes possible.
-                  </p>
-                )}
-                {result.verdict === 'needs-int4' && result.bestFittingBlockBytes !== null && (
-                  <p className="text-sm text-amber-700 dark:text-amber-400">
-                    Change the weight precision to INT4. The expert block then needs{' '}
-                    {formatBytes(result.bestFittingBlockBytes).text}, and the run becomes possible.
-                    INT4 needs a checkpoint that is already quantised to 4 bits.
-                  </p>
-                )}
+                {result.verdict === 'needs-narrower' &&
+                  result.bestFittingDtype !== null &&
+                  result.bestFittingBlockBytes !== null && (
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      {`Change the weight format to ${weightFormatLabel(result.bestFittingDtype)}. The expert block then needs ${formatBytes(result.bestFittingBlockBytes).text}, and the run becomes possible.${isFourBitFormat(result.bestFittingDtype) ? ' It needs a checkpoint that is already quantised to 4 bits.' : ''}`}
+                    </p>
+                  )}
                 {result.verdict === 'needs-offload' && (
                   <p className="text-sm text-rose-700 dark:text-rose-400">
-                    No weight precision makes this expert block fit. Lower the micro batch, use a GPU
+                    No weight format makes this expert block fit. Lower the micro batch, use a GPU
                     with more VRAM, or divide the calibration across several GPUs.
                   </p>
                 )}
@@ -286,8 +284,8 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
                 </p>
                 <p className="text-muted-foreground text-sm">
                   {result.removedExperts === 0
-                    ? `The expert parameters stay at ${formatBytes(shape.routedExpertParams * 2).text} in BF16, and the total parameter count is unchanged at ${formatExact(shape.totalParams)}.`
-                    : `The expert parameters fall from ${formatBytes(shape.routedExpertParams * 2).text} to ${formatBytes(result.expertParamsAfter * 2).text} in BF16. The total parameters fall from ${formatExact(shape.totalParams)} to ${formatExact(result.totalParamsAfter)}.`}
+                    ? `The expert parameters stay at ${formatBytes(shape.routedExpertParams * bytesPerParam(result.weightDtype)).text} in ${weightFormatLabel(result.weightDtype)}, and the total parameter count is unchanged at ${formatExact(shape.totalParams)}.`
+                    : `The expert parameters fall from ${formatBytes(shape.routedExpertParams * bytesPerParam(result.weightDtype)).text} to ${formatBytes(result.expertParamsAfter * bytesPerParam(result.weightDtype)).text} in ${weightFormatLabel(result.weightDtype)}. The total parameters fall from ${formatExact(shape.totalParams)} to ${formatExact(result.totalParamsAfter)}.`}
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-400">
                   {result.removedExperts === 0

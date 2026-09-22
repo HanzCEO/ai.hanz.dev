@@ -1,31 +1,54 @@
 import {
+  INFERENCE_WEIGHT_FORMATS,
   MTP_HEADS,
   type InferenceInputField,
-  type InferencePrecision,
 } from '@/lib/inference'
+import { getWeightFormat, weightFormatLabel, type WeightFormatId } from '@/lib/weight-format'
 import NumberField from '@/components/ui/number-field'
 import SegmentedControl from '@/components/ui/segmented'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
-import type { InferenceFormInputs } from './useInferenceState'
+import type { InferenceFormInputs, InferenceWeightChoice } from './useInferenceState'
+
+/** The bytes for each weight, in the short form the hint uses. */
+function bytesHint(id: WeightFormatId): string {
+  const spec = getWeightFormat(id)
+  if (spec.blockSize === null) {
+    return spec.bytes === 1 ? '1 byte for each weight' : `${spec.bytes} bytes for each weight`
+  }
+  return `${spec.bytes.toFixed(4)} bytes for each weight, with the scale sidecar`
+}
+
+interface WeightChoice {
+  id: InferenceWeightChoice
+  label: string
+  hint: string
+}
 
 /**
- * The two precisions, with the one fact that decides the answer.
+ * The automatic choice first, then every format the calculator can price.
  *
- * Both take two bytes for each weight, so the picker cannot change the memory
- * figure. It is offered because a reader arrives with a precision in mind, and
- * the hint says plainly that the two give the same result.
+ * Auto follows the checkpoint. A checkpoint that stores its experts in MXFP4
+ * and the rest in FP8 is therefore costed that way without the reader doing
+ * anything. A named format forces one format on the whole model.
  */
-const PRECISION_OPTIONS: Array<{ id: InferencePrecision; label: string; hint: string }> = [
+const WEIGHT_OPTIONS: WeightChoice[] = [
   {
-    id: 'FP16',
-    label: 'FP16',
-    hint: 'Two bytes for each weight. A narrow exponent range, so a large activation can overflow.',
+    id: 'auto',
+    label: 'Auto (from the checkpoint)',
+    hint: 'The calculator reads the format from the checkpoint config. A mixed checkpoint is costed with its experts apart from the rest.',
   },
-  {
-    id: 'BF16',
-    label: 'BF16',
-    hint: 'Two bytes for each weight. A wide exponent range, so it is the safer choice for a large model. The memory footprint is the same as FP16.',
-  },
+  ...INFERENCE_WEIGHT_FORMATS.map((id) => ({
+    id,
+    label: weightFormatLabel(id),
+    hint: bytesHint(id),
+  })),
 ]
 
 interface InferenceFormProps {
@@ -44,7 +67,7 @@ interface InferenceFormProps {
  *
  * The model, the context length, the sequence count and the cache dtypes belong
  * to step 1, so this form does not repeat them. It asks only for what step 1
- * cannot know: the precision the weights are served in, the speculative
+ * cannot know: the weight format the checkpoint is served in, the speculative
  * decoding head, and the memory limits.
  */
 export default function InferenceForm({
@@ -54,15 +77,39 @@ export default function InferenceForm({
   headroomError,
   maxGpusError,
 }: InferenceFormProps) {
+  const selectedWeight =
+    WEIGHT_OPTIONS.find((option) => option.id === inputs.weightFormat) ?? WEIGHT_OPTIONS[0]
+
   return (
     <form className="flex flex-col gap-6" onSubmit={(event) => event.preventDefault()}>
-      <SegmentedControl
-        legend="Precision"
-        options={PRECISION_OPTIONS}
-        value={inputs.precision}
-        onValueChange={(precision) => update({ precision })}
-        wrap
-      />
+      <div className="flex flex-col gap-2">
+        <label htmlFor="inference-weight-format" className="text-sm font-medium">
+          Weight format
+        </label>
+        <Select
+          value={inputs.weightFormat}
+          onValueChange={(next) => {
+            if (WEIGHT_OPTIONS.some((option) => option.id === next)) {
+              update({ weightFormat: next as InferenceWeightChoice })
+            }
+          }}
+        >
+          <SelectTrigger id="inference-weight-format" className="w-full">
+            <SelectValue>{selectedWeight.label}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {WEIGHT_OPTIONS.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {selectedWeight.hint}
+          {invalidField === 'weightFormat' && ' That format is not one the calculator knows.'}
+        </p>
+      </div>
 
       <div className="flex flex-col gap-3">
         <SegmentedControl

@@ -2,15 +2,20 @@ import { formatBytes, formatExact } from '../format'
 import { GPU_PRESETS, type GpuSpec } from '../hardware'
 import { computeKvCache } from '../kvcache'
 import type { ModelShape } from '../model-shape'
+import {
+  detectWeightQuantization,
+  isWeightFormatId,
+  uniformWeightQuantization,
+  weightBytesFor,
+  weightFormatLabel,
+} from '../weight-format'
 
 import {
   ACTIVATION_BYTES_PER_ELEMENT,
   ACTIVATION_FACTOR,
   BANDWIDTH_EFFICIENCY,
-  BYTES_PER_WEIGHT,
   DEFAULT_MTP_HEAD,
   GIB,
-  PRECISIONS,
   RUNTIME_OVERHEAD_BYTES,
   isMtpHeadType,
   mtpHeadSpec,
@@ -31,11 +36,22 @@ function requirePositive(value: number, field: InferenceInputField, label: strin
   }
 }
 
+/**
+ * Bytes for each weight as a short string, for the breakdown text.
+ *
+ * The figure is fractional for a block scaled format, so an integer is printed
+ * whole and everything else is trimmed to five places.
+ */
+function formatBytesPerWeight(bytes: number): string {
+  if (Number.isInteger(bytes)) return String(bytes)
+  return bytes.toFixed(5).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 function validate(inputs: InferenceInputs): void {
-  if (!PRECISIONS.includes(inputs.precision as (typeof PRECISIONS)[number])) {
+  if (inputs.weightFormat !== undefined && !isWeightFormatId(inputs.weightFormat)) {
     throw new InferenceInputError(
-      `Unknown precision "${String(inputs.precision)}". Pick FP16 or BF16.`,
-      'precision',
+      `Unknown weight format "${String(inputs.weightFormat)}". Pick a format from the list.`,
+      'weightFormat',
     )
   }
   if (inputs.mtpHead !== undefined && !isMtpHeadType(inputs.mtpHead)) {
@@ -57,18 +73,20 @@ function validate(inputs: InferenceInputs): void {
 }
 
 /**
- * Estimates the GPU configuration a model needs for FP16 or BF16 inference.
+ * Estimates the GPU configuration a model needs for inference.
  *
  * The three questions are how much memory the run needs, which card holds it,
  * and how fast the answer comes out. All three follow from the model config,
- * the context length, and the number of sequences served at once.
+ * the context length, the weight format, and the number of sequences served at
+ * once.
  *
- * Two facts drive the whole model. First, FP16 and BF16 both take two bytes for
- * each weight, so the footprint is the same for either one. Second, the weights
- * and the KV cache divide across the tensor-parallel ranks while the activation
- * buffer and the framework reserve stay in full on every card. A second card
- * therefore does not halve the footprint, which is why the smallest
- * configuration is not always the one with the fewest cards.
+ * Two facts drive the whole model. First, the bytes for each weight follow the
+ * format the checkpoint publishes, and a mixed checkpoint prices its experts
+ * apart from the rest. Second, the weights and the KV cache divide across the
+ * tensor-parallel ranks while the activation buffer and the framework reserve
+ * stay in full on every card. A second card therefore does not halve the
+ * footprint, which is why the smallest configuration is not always the one with
+ * the fewest cards.
  *
  * Decode is bound by memory bandwidth rather than by arithmetic. Each token
  * reads every active weight once, so the throughput figure here is a bandwidth
@@ -83,8 +101,16 @@ function validate(inputs: InferenceInputs): void {
 export function estimateInference(shape: ModelShape, inputs: InferenceInputs): InferenceResult {
   validate(inputs)
 
-  const { precision, contextLength, sequences, headroom, maxGpus } = inputs
-  const bytesPerWeight = BYTES_PER_WEIGHT
+  const { contextLength, sequences, headroom, maxGpus } = inputs
+
+  // The format comes from the checkpoint by default. A reader who forces one
+  // puts every bucket on that format, which is what the picker means.
+  const weightQuantization = inputs.weightFormat
+    ? uniformWeightQuantization(inputs.weightFormat)
+    : detectWeightQuantization(inputs.config)
+  const weightBytes = weightBytesFor(shape, weightQuantization)
+  const weightsBytes = weightBytes.total
+  const activeBytesPerToken = weightBytes.activePerToken
 
   // A head is trained against one model, so it is a property of the checkpoint
   // and not of the hardware. An absent head is no head, which is the roofline.
@@ -94,15 +120,15 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
   // --- Memory -------------------------------------------------------------
   //
   // Every weight in the checkpoint has to be resident, including the shared
-  // experts, the router, and the language model head.
-  const weightsBytes = shape.totalParams * bytesPerWeight
+  // experts, the router, and the language model head. The bytes follow the
+  // format of each bucket, so an MXFP4 expert bank is not priced at two bytes.
 
   // The KV cache shape is read from the config by the shared engine, so a
   // grouped query model, a latent attention model, and a hybrid linear model
   // each get their own formula rather than one approximation. The cache dtype
-  // is the cache layer's choice and defaults to the weight precision.
-  const kvCacheDtype = inputs.kvCacheDtype ?? precision
-  const indexerDtype = inputs.indexerDtype ?? precision
+  // is the cache layer's choice and defaults to BF16.
+  const kvCacheDtype = inputs.kvCacheDtype ?? 'BF16'
+  const indexerDtype = inputs.indexerDtype ?? 'BF16'
   const kv = computeKvCache(inputs.config, {
     contextLength,
     sequenceCount: sequences,
@@ -133,7 +159,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
   // Each token reads every active weight and the whole KV cache once. A head
   // raises the rate, because one pass of the model then yields several
   // accepted tokens. The memory terms above do not move with it.
-  const stepBytes = shape.activeParamsPerToken * bytesPerWeight + kvCacheBytes
+  const stepBytes = activeBytesPerToken + kvCacheBytes
   const decodeTokensPerSecondFor = (gpu: GpuSpec, cards: number) =>
     stepBytes > 0
       ? ((gpu.bandwidthGBs * 1e9 * cards * BANDWIDTH_EFFICIENCY) / stepBytes) *
@@ -233,10 +259,16 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     ? `${recommended.gpuCount} x ${recommended.gpu.label}`
     : 'no configuration within the limit'
 
+  // The format sentence names both buckets when the checkpoint is mixed, so a
+  // reader can see why the byte figure is not two bytes for each weight.
+  const weightFormatSentence = weightQuantization.mixed
+    ? ` The experts are stored in ${weightFormatLabel(weightQuantization.experts)} at ${formatBytesPerWeight(weightBytes.expertBytes)} bytes for each weight. The rest is stored in ${weightFormatLabel(weightQuantization.dense)} at ${formatBytesPerWeight(weightBytes.denseBytes)} bytes for each weight.`
+    : ` The weights are stored in ${weightFormatLabel(weightQuantization.primary)} at ${formatBytesPerWeight(weightBytes.denseBytes)} bytes for each weight.`
+
   const steps: Array<{ label: string; detail: string }> = [
     {
       label: 'Resident weights',
-      detail: `${shape.modelType} holds ${formatExact(shape.totalParams)} parameters. At ${bytesPerWeight} bytes for each weight in ${precision}, the weights need ${formatBytes(weightsBytes).text}. Both FP16 and BF16 are two bytes, so the other precision gives the same figure.`,
+      detail: `${shape.modelType} holds ${formatExact(shape.totalParams)} parameters.${weightFormatSentence} That is ${formatBytes(weightsBytes).text} in total.`,
     },
     {
       label: 'KV cache',
@@ -264,7 +296,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     },
     {
       label: 'Decode throughput',
-      detail: `Each token reads ${formatExact(shape.activeParamsPerToken)} active parameters and the whole cache, which is ${formatBytes(stepBytes).text}.${recommended ? ` ${recommended.gpuCount} x ${recommended.gpu.label} offers ${formatExact(recommended.gpu.bandwidthGBs * recommended.gpuCount)} GB/s at ${(BANDWIDTH_EFFICIENCY * 100).toFixed(0)} percent of the peak. That roofline gives about ${formatExact(basePerSequenceTokensPerSecond)} tokens each second for one sequence.` : ''}`,
+      detail: `Each token reads ${formatExact(shape.activeParamsPerToken)} active parameters, which is ${formatBytes(activeBytesPerToken).text}, and the whole cache. That is ${formatBytes(stepBytes).text} for each token.${recommended ? ` ${recommended.gpuCount} x ${recommended.gpu.label} offers ${formatExact(recommended.gpu.bandwidthGBs * recommended.gpuCount)} GB/s at ${(BANDWIDTH_EFFICIENCY * 100).toFixed(0)} percent of the peak. That roofline gives about ${formatExact(basePerSequenceTokensPerSecond)} tokens each second for one sequence.` : ''}`,
     },
     {
       label: 'MTP head',
@@ -298,7 +330,32 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
       value: shape.activeParamsPerToken,
       source: 'the weights one token reads on the forward pass, router excluded. These set the decode bandwidth.',
     },
-    { key: 'precision', value: precision, source: 'the precision the model is served in' },
+    { key: 'weight_format', value: weightQuantization.primary, source: 'the format the checkpoint publishes, or the format the reader selected' },
+    {
+      key: 'expert_weight_format',
+      value: weightQuantization.experts,
+      source: 'the format the routed and shared experts are stored in',
+    },
+    {
+      key: 'dense_weight_format',
+      value: weightQuantization.dense,
+      source: 'the format of attention, the dense feed forward, the router and the embeddings',
+    },
+    {
+      key: 'expert_bytes_per_weight',
+      value: weightBytes.expertBytes,
+      source: 'the payload and the share of the scale sidecar for one expert weight',
+    },
+    {
+      key: 'dense_bytes_per_weight',
+      value: weightBytes.denseBytes,
+      source: 'the payload and the share of the scale sidecar for one dense weight',
+    },
+    {
+      key: 'active_bytes_per_token',
+      value: activeBytesPerToken,
+      source: 'the bytes one token reads on the forward pass, router excluded',
+    },
     {
       key: 'mtp_head',
       value: mtpHead,
@@ -309,9 +366,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
       value: mtpMultiplier,
       source: 'the multiplier the head applies to the decode rate, held below the published figure',
     },
-    { key: 'bytes_per_weight', value: bytesPerWeight, source: 'FP16 and BF16 are both 2 bytes' },
-    {
-      key: 'kv_cache_dtype',
+    { key: 'kv_cache_dtype',
       value: kvCacheDtype,
       source: 'the dtype the cache layer holds the KV cache in',
     },
@@ -337,18 +392,25 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
   }
 
   const assumptions = [
-    'FP16 and BF16 are both two bytes for each weight. A model served in either one needs the same VRAM and the same bandwidth. The two differ in numeric range and not in size.',
+    'BF16 and FP16 are both two bytes for each weight. A model served in either one needs the same VRAM and the same bandwidth. The two differ in numeric range and not in size.',
+    'A 4 bit weight is never stored alone. It shares a scale with a block of neighbours, so MXFP4 costs 4.25 bits for each weight and NVFP4 costs 4.5 bits. The scale sidecar is counted in every byte figure here.',
+    'The weight format is read from the checkpoint config. A checkpoint that names FP8, MXFP4, or NVFP4 is costed in that format, and a checkpoint that names none is costed as BF16.',
     'The weights and the KV cache divide across the tensor-parallel ranks. The activation buffer and the framework reserve stay in full on every card. A second card therefore does not halve the footprint.',
     'The activation buffer is an estimate of the live intermediates in a decode step. It is not a measured value. Lower the sequence count if the real run runs out of VRAM.',
     `Decode is bound by memory bandwidth, because each token reads every active weight once. The throughput figure is a bandwidth roofline at ${(BANDWIDTH_EFFICIENCY * 100).toFixed(0)} percent of the peak. It ignores prefill and kernel launch overhead.`,
     'Tensor parallelism across more than one node needs a fast interconnect. This estimate assumes the cards share the work at the bandwidth quoted. A PCIe link between nodes cannot do that.',
     'The parameter count comes from the config. Norms and biases are left out, because they are a fraction of a percent of the weights.',
-    'The model is served in FP16 or BF16 with no quantization. A quantized checkpoint is smaller and needs less hardware.',
     'The KV cache figure is the logical size of the cache. A serving engine adds its own overhead on top, for example page padding or per block alignment.',
-    'The KV cache dtype is set in the cache layer and not by the weight precision. A narrower cache dtype lowers the cache size and therefore the VRAM. It never lowers the weight size, because the weights are still served in FP16 or BF16.',
+    'The KV cache dtype is set in the cache layer and not by the weight format. A narrower cache dtype lowers the cache size and therefore the VRAM. It never lowers the weight size.',
     'MTP is a property of the trained checkpoint. A head trained for one model does not transfer to another. The multiplier here is an estimate for measurement.',
     ...kv.assumptions,
   ]
+
+  if (weightQuantization.mixed) {
+    assumptions.push(
+      `This checkpoint stores its experts in ${weightFormatLabel(weightQuantization.experts)} and the rest in ${weightFormatLabel(weightQuantization.dense)}. The two are costed separately, so the byte figure is not one format for every weight.`,
+    )
+  }
 
   const notes = [...shape.notes]
   if (kv.bestEffort) {
@@ -359,14 +421,17 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
 
   return {
     shape,
-    precision,
-    bytesPerWeight,
+    weightFormat: weightQuantization.primary,
+    weightQuantization,
+    weightsBytes,
+    expertWeightBytes: weightBytes.experts,
+    denseWeightBytes: weightBytes.dense,
+    activeBytesPerToken,
     kvCacheDtype,
     indexerDtype,
     contextLength,
     sequences,
     maxGpus,
-    weightsBytes,
     kvCacheBytes,
     kvBytesPerToken,
     activationBytes,

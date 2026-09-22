@@ -50,7 +50,7 @@ const DSPARK_DESCRIPTION =
 
 const INFERENCE_TITLE = 'Inference GPU Calculator | ai.hanz.dev'
 const INFERENCE_DESCRIPTION =
-  'Inference GPU calculator for FP16 and BF16. Size the KV cache first, then find the smallest GPU configuration that holds the model, with the decode rate it reaches.'
+  'Inference GPU calculator for BF16, FP16, FP8, MXFP4, and NVFP4 weights. Size the KV cache first, then find the smallest GPU configuration that holds the model, with the decode rate it reaches.'
 
 export const ROUTE_META: RouteMeta[] = [
   {

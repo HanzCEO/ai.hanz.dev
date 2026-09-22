@@ -37,7 +37,7 @@ describe('INFERENCE_SCHEMA', () => {
       'kvCacheDtype',
       'indexerDtype',
       // The hardware fields this layer adds.
-      'precision',
+      'weightFormat',
       'mtpHead',
       'headroomPercent',
       'maxGpus',
@@ -58,11 +58,11 @@ describe('INFERENCE_SCHEMA', () => {
     const added = Object.keys(INFERENCE_SCHEMA).filter(
       (key) => !(key in CALCULATOR_SCHEMA),
     )
-    expect(added.sort()).toEqual(['headroomPercent', 'maxGpus', 'mtpHead', 'precision'])
+    expect(added.sort()).toEqual(['headroomPercent', 'maxGpus', 'mtpHead', 'weightFormat'])
   })
 
-  it('opens on BF16, no MTP head, a 10 percent headroom, and a limit of 8 cards', () => {
-    expect(DEFAULTS.precision).toBe('BF16')
+  it('opens on the automatic format, no MTP head, a 10 percent headroom, and a limit of 8 cards', () => {
+    expect(DEFAULTS.weightFormat).toBe('auto')
     expect(DEFAULTS.mtpHead).toBe('none')
     expect(DEFAULTS.headroomPercent).toBe('10')
     expect(DEFAULTS.maxGpus).toBe('8')
@@ -107,7 +107,7 @@ describe('INFERENCE_SCHEMA', () => {
       sequenceCount: '8',
       kvCacheDtype: 'FP8_E4M3',
       indexerDtype: 'FP4',
-      precision: 'FP16',
+      weightFormat: 'MXFP4',
       mtpHead: 'eagle-3',
       headroomPercent: '12.5',
       maxGpus: '4',
@@ -124,11 +124,12 @@ describe('INFERENCE_SCHEMA', () => {
     }
   })
 
-  it('falls back to the default when the URL names an unknown precision', () => {
+  it('falls back to the default when the URL names an unknown weight format', () => {
     // A parser returns null for anything outside the allowed set, and the hook
     // then keeps the field at its default rather than accepting the value.
-    expect(INFERENCE_SCHEMA.precision.parse('FP8')).toBeNull()
-    expect(INFERENCE_SCHEMA.precision.default).toBe('BF16')
+    expect(INFERENCE_SCHEMA.weightFormat.parse('FP4')).toBeNull()
+    expect(INFERENCE_SCHEMA.weightFormat.parse('nope')).toBeNull()
+    expect(INFERENCE_SCHEMA.weightFormat.default).toBe('auto')
   })
 
   it('rejects an unknown mode and an unknown tie setting', () => {
@@ -136,10 +137,15 @@ describe('INFERENCE_SCHEMA', () => {
     expect(INFERENCE_SCHEMA.tieEmbeddings.parse('shared')).toBeNull()
   })
 
-  it('accepts the two weight precisions and no others', () => {
-    expect(INFERENCE_SCHEMA.precision.parse('FP16')).toBe('FP16')
-    expect(INFERENCE_SCHEMA.precision.parse('BF16')).toBe('BF16')
-    expect(INFERENCE_SCHEMA.precision.parse('INT8')).toBeNull()
+  it('accepts the automatic choice and every weight format', () => {
+    expect(INFERENCE_SCHEMA.weightFormat.parse('auto')).toBe('auto')
+    expect(INFERENCE_SCHEMA.weightFormat.parse('BF16')).toBe('BF16')
+    expect(INFERENCE_SCHEMA.weightFormat.parse('FP8_E4M3')).toBe('FP8_E4M3')
+    expect(INFERENCE_SCHEMA.weightFormat.parse('MXFP4')).toBe('MXFP4')
+    expect(INFERENCE_SCHEMA.weightFormat.parse('NVFP4')).toBe('NVFP4')
+    expect(INFERENCE_SCHEMA.weightFormat.parse('INT4')).toBe('INT4')
+    // A name that is not a format is rejected rather than guessed at.
+    expect(INFERENCE_SCHEMA.weightFormat.parse('FP4')).toBeNull()
   })
 
   it('accepts the five MTP heads and no others', () => {

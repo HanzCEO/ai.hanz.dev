@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { detectDsparkShape, type DsparkTargetShape } from '@/lib/dspark'
 import { parseConfigText, type RawConfig } from '@/lib/model-config'
 import { useModelConfig } from '@/lib/use-model-config'
+import { detectWeightQuantization, type WeightFormatId } from '@/lib/weight-format'
 
 import type { DsparkFormInputs } from './useDsparkState'
 
@@ -14,6 +15,8 @@ export interface DsparkShapeState {
   config: RawConfig | null
   configUrl: string | null
   error: string | null
+  /** The weight format the target checkpoint declares, when it declares one. */
+  suggestedWeightFormat: WeightFormatId | null
 }
 
 const IDLE: DsparkShapeState = {
@@ -22,6 +25,7 @@ const IDLE: DsparkShapeState = {
   config: null,
   configUrl: null,
   error: null,
+  suggestedWeightFormat: null,
 }
 
 function numberFrom(value: string): number | null {
@@ -87,11 +91,16 @@ export function manualConfig(inputs: DsparkFormInputs): RawConfig | null {
 
 function readyFrom(config: RawConfig, configUrl: string | null): DsparkShapeState {
   const shape = detectDsparkShape(config)
+  const quant = detectWeightQuantization(config)
   return {
     status: shape ? 'ready' : 'error',
     shape,
     config,
     configUrl,
+    // A config that names only a torch dtype or nothing at all is left to the
+    // default, because the picker already opens on BF16 in that case.
+    suggestedWeightFormat:
+      quant.source === 'assumed' || quant.source === 'torch_dtype' ? null : quant.primary,
     error: shape
       ? null
       : 'That config describes no decoder with a hidden size and a depth. The calculator therefore has nothing to cost.',

@@ -1,4 +1,12 @@
 import { formatBytes, formatExact } from '../format'
+import type { GpuSpec } from '../hardware'
+import {
+  bytesPerWeight,
+  isFourBitFormat,
+  isFp8Format,
+  weightFormatLabel,
+  type WeightFormatId,
+} from '../weight-format'
 import {
   ACTIVATION_BYTES_PER_ELEMENT,
   ACTIVATION_FACTOR,
@@ -22,6 +30,24 @@ import {
 } from './types'
 
 const GIB = 1024 ** 3
+
+/**
+ * The dense rate the target forward pass runs at.
+ *
+ * The drafter always trains in BF16, so this only covers the frozen target. A
+ * quantized target is dequantized per block, so it runs at the nearest tensor
+ * format the card supports. A 4 bit format uses the FP4 path where the card has
+ * one, and falls back to FP8 and then BF16 where it does not.
+ */
+function targetPeakTflops(format: WeightFormatId, gpu: GpuSpec): number {
+  if (isFourBitFormat(format)) {
+    return gpu.fp4DenseTflops ?? gpu.fp8DenseTflops ?? gpu.bf16DenseTflops
+  }
+  if (isFp8Format(format)) {
+    return gpu.fp8DenseTflops ?? gpu.bf16DenseTflops
+  }
+  return gpu.bf16DenseTflops
+}
 
 /** The scale a value has to reach to be a cost worth reporting. */
 function requirePositive(value: number, field: DsparkInputField, label: string): void {
@@ -161,8 +187,14 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
 
   const totalFlops = trainingFlops + contextFlops + cachePrepFlops
 
-  const peak = inputs.gpu.bf16DenseTflops * 1e12 * inputs.gpuCount
-  const computeSeconds = totalFlops / (peak * inputs.mfu)
+  // The draft and the target run at different rates when the target is
+  // quantized, so the two are costed apart. The drafter trains in BF16, and the
+  // target forward pass runs at the rate of the format it is stored in.
+  const draftFlops = trainingFlops + contextFlops
+  const draftPeak = inputs.gpu.bf16DenseTflops * 1e12 * inputs.gpuCount
+  const targetPeak = targetPeakTflops(inputs.targetWeightFormat, inputs.gpu) * 1e12 * inputs.gpuCount
+  const computeSeconds =
+    draftFlops / (draftPeak * inputs.mfu) + cachePrepFlops / (targetPeak * inputs.mfu)
 
   // The cache is read back once per epoch, so the stream cost scales with the
   // epoch count while the write happens only once.
@@ -183,7 +215,10 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
 
   // Online capture means the target stays loaded for the whole run. Offline
   // means it ran once, during cache preparation, and is gone by training time.
-  const targetWeightBytes = offline ? 0 : shape.totalParams * BF16_BYTES
+  // The target is costed in the format the checkpoint publishes, so an MXFP4
+  // target is not priced at two bytes for each weight.
+  const targetBytesPerWeight = bytesPerWeight(inputs.targetWeightFormat)
+  const targetWeightBytes = offline ? 0 : shape.totalParams * targetBytesPerWeight
 
   // The weights, the optimizer state, the gradients and the resident target are
   // model state. A run spread over several cards holds a slice of each rather
@@ -252,7 +287,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'Arithmetic duration',
-      detail: `One ${inputs.gpu.label} reaches ${inputs.gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense. With ${inputs.gpuCount} ${inputs.gpuCount === 1 ? 'GPU' : 'GPUs'} at ${(inputs.mfu * 100).toFixed(0)} percent utilisation, the arithmetic takes ${(computeSeconds / 3600).toFixed(2)} hours.`,
+      detail: `One ${inputs.gpu.label} reaches ${inputs.gpu.bf16DenseTflops.toLocaleString('en-US')} TFLOPS dense for the drafter, and ${targetPeakTflops(inputs.targetWeightFormat, inputs.gpu).toLocaleString('en-US')} TFLOPS in ${weightFormatLabel(inputs.targetWeightFormat)} for the target. With ${inputs.gpuCount} ${inputs.gpuCount === 1 ? 'GPU' : 'GPUs'} at ${(inputs.mfu * 100).toFixed(0)} percent utilisation, the arithmetic takes ${(computeSeconds / 3600).toFixed(2)} hours.`,
     },
     {
       label: 'Target cache reads',
@@ -266,7 +301,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     },
     {
       label: 'VRAM',
-      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16, and the optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}, and the activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text}.`} The model state comes to ${formatBytes(modelStateBytes).text}${gpuCount > 1 ? `, which is ${formatBytes(modelStateBytes / gpuCount).text} on each of the ${gpuCount} GPUs` : ''}. With the activation buffer and the reserve on top, one card holds ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM.`,
+      detail: `The drafter weights need ${formatBytes(draftWeightBytes).text} in bf16, and the optimizer state needs ${formatBytes(optimizerBytes).text}. The gradients need ${formatBytes(gradientBytes).text}, and the activation buffer needs ${formatBytes(activationBytes).text}. The framework reserve needs ${formatBytes(RUNTIME_OVERHEAD_BYTES).text}.${offline ? '' : ` The resident target needs ${formatBytes(targetWeightBytes).text} in ${weightFormatLabel(inputs.targetWeightFormat)}.`} The model state comes to ${formatBytes(modelStateBytes).text}${gpuCount > 1 ? `, which is ${formatBytes(modelStateBytes / gpuCount).text} on each of the ${gpuCount} GPUs` : ''}. With the activation buffer and the reserve on top, one card holds ${formatBytes(peakVramBytes).text}, against ${formatBytes(vramBytes).text} of VRAM.`,
     },
   ]
 
@@ -287,6 +322,16 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
       value: shape.activeParamsPerToken,
       source: 'the target parameters that one token touches. These set the cost to prepare the target cache.',
     },
+    {
+      key: 'target_weight_format',
+      value: inputs.targetWeightFormat,
+      source: 'the format the target checkpoint publishes, or the format the reader selected',
+    },
+    {
+      key: 'target_bytes_per_weight',
+      value: targetBytesPerWeight,
+      source: 'the payload and the share of the scale sidecar for one target weight',
+    },
     { key: 'num_target_layers', value: inputs.numTargetLayers, source: 'recipe: the captured layers' },
     { key: 'num_draft_layers', value: inputs.numDraftLayers, source: 'recipe: the depth of the drafter backbone' },
     { key: 'block_size', value: inputs.blockSize, source: 'recipe: gamma, the drafted block' },
@@ -303,6 +348,7 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     'Each drafter block attends to the target context before its anchor, and to itself in both directions. The context term therefore scales with the sequence length. That term is smaller than the block arithmetic at every setting in the recipes.',
     'The run trains every position in a block in 1 parallel pass. The arithmetic is therefore 6 FLOPs for each drafter parameter and each position. It does not depend on the sequence length. This is why a drafter over a billion tokens is affordable.',
     'The target cache stores bf16 hidden states, int32 token ids, and uint8 masks. This matches the layout that DeepSpec writes.',
+    'The target is costed in the weight format the checkpoint publishes. A quantized target is smaller in VRAM and runs its forward pass at the rate of that format. The drafter itself is always trained in bf16.',
     'The training data on disk is the regenerated text, and not a tokenised array. English text runs at about 4 bytes for each token, so the size this calculator reports is an estimate of the data the run reads rather than a measured size.',
     offline
       ? 'Target cache preparation is 1 forward pass of the target over the whole training set. Its cost therefore scales with the target and not with the drafter. The estimate includes it, because it is large for a large target.'
@@ -329,6 +375,8 @@ export function estimateDspark(shape: DsparkTargetShape, inputs: DsparkInputs): 
     mode: inputs.dataMode,
     verdict,
     shape,
+    targetWeightFormat: inputs.targetWeightFormat,
+    targetBytesPerWeight,
     cacheBytesPerToken,
     cacheBytes,
     cacheWriteSeconds,

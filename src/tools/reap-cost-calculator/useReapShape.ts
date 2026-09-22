@@ -2,13 +2,11 @@ import { useMemo } from 'react'
 
 import {
   parseConfigText,
-  readObject,
-  readString,
-  unwrapConfig,
   type RawConfig,
 } from '@/lib/model-config'
-import { detectMoeShape, type MoeShape, type WeightDtype } from '@/lib/reap'
+import { detectMoeShape, type MoeShape } from '@/lib/reap'
 import { useModelConfig } from '@/lib/use-model-config'
+import { detectWeightQuantization, type WeightFormatId } from '@/lib/weight-format'
 
 import type { ReapFormInputs } from './useReapState'
 
@@ -21,7 +19,7 @@ export interface ReapShapeState {
   configUrl: string | null
   error: string | null
   /** The weight format the checkpoint itself declares, when it declares one. */
-  suggestedDtype: WeightDtype | null
+  suggestedDtype: WeightFormatId | null
 }
 
 const IDLE: ReapShapeState = {
@@ -87,25 +85,18 @@ export function manualConfig(inputs: ReapFormInputs): RawConfig | null {
   return config
 }
 
-/** Reads the precision the checkpoint was published in, if it says. */
-function suggestedDtypeFor(config: RawConfig): WeightDtype | null {
-  const { inner, outer } = unwrapConfig(config)
-  const quant = readObject(outer, 'quantization_config') ?? readObject(inner, 'quantization_config')
-  if (!quant) return null
-
-  const method = (readString(quant, 'quant_method') ?? '').toLowerCase()
-  const format = (readString(quant, 'fmt') ?? '').toLowerCase()
-
-  if (method.includes('fp8') || format.includes('e4m3') || format.includes('e5m2')) return 'FP8'
-  if (
-    method.includes('fp4') ||
-    method.includes('nvfp4') ||
-    method.includes('mxfp4') ||
-    format.includes('e2m1')
-  ) {
-    return 'INT4'
-  }
-  return null
+/**
+ * Reads the weight format the checkpoint was published in, if it says.
+ *
+ * The calibration reads the whole checkpoint, but the VRAM peak is one expert
+ * block, so the expert bucket is the format that decides the fit. A config that
+ * names only a torch dtype or nothing at all is left to the default, because
+ * the panel already opens on BF16 in that case.
+ */
+export function suggestedDtypeFor(config: RawConfig): WeightFormatId | null {
+  const quant = detectWeightQuantization(config)
+  if (quant.source === 'assumed' || quant.source === 'torch_dtype') return null
+  return quant.experts
 }
 
 function readyFrom(config: RawConfig, configUrl: string | null): ReapShapeState {

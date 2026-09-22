@@ -74,7 +74,7 @@ export default function InferenceGpuCalculator() {
 
     const inferenceInputs: InferenceInputs = {
       config,
-      precision: inputs.precision,
+      weightFormat: inputs.weightFormat === 'auto' ? undefined : inputs.weightFormat,
       mtpHead: inputs.mtpHead,
       contextLength,
       sequences: sequenceCount,
@@ -103,7 +103,7 @@ export default function InferenceGpuCalculator() {
     shape,
     inputs.contextLength,
     inputs.sequenceCount,
-    inputs.precision,
+    inputs.weightFormat,
     inputs.mtpHead,
     inputs.kvCacheDtype,
     inputs.indexerDtype,
@@ -133,7 +133,7 @@ export default function InferenceGpuCalculator() {
 
       <ToolHeader
         title="Inference GPU Calculator"
-        description="Answer the hardware question in 2 steps. Step 1 sizes the KV cache from the model, the context length, and the sequences you serve. Step 2 turns that into the smallest GPU configuration that holds the run in FP16 or BF16, and reports the decode rate it reaches. It also reports what a speculative MTP head does to that rate. The model shape comes from a HuggingFace or ModelScope config, from a config.json you paste, or from values you enter yourself."
+        description="Answer the hardware question in 2 steps. Step 1 sizes the KV cache from the model, the context length, and the sequences you serve. Step 2 turns that into the smallest GPU configuration that holds the run in the weight format the checkpoint publishes, and reports the decode rate it reaches. The format is read from the config, and you can force one from the form. The page also reports what a speculative MTP head does to that rate. The model shape comes from a HuggingFace or ModelScope config, from a config.json you paste, or from values you enter yourself."
       />
 
       <InferenceLayers

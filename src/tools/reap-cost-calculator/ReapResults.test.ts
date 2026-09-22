@@ -20,7 +20,7 @@ const RTX_5090 = findGpu('rtx-5090') as GpuSpec
  * everything else, so the two suites cost out the same run.
  */
 function inputs(overrides: Partial<ReapInputs> = {}): ReapInputs {
-  return reapInputs({ gpu: RTX_5090, weightDtype: 'FP8', ...overrides })
+  return reapInputs({ gpu: RTX_5090, weightDtype: 'FP8_E4M3', ...overrides })
 }
 
 /**
@@ -64,7 +64,7 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
   it('renders a feasibility verdict for the card', () => {
     const html = render(glm53Text)
     expect(html).toContain('RTX 5090')
-    expect(html).toMatch(/Fits|Needs FP8|Needs offloading/)
+    expect(html).toMatch(/Fits|Needs FP8|Needs MXFP4|Needs NVFP4|Needs INT4|Needs offloading/)
     expect(html).toContain('Can I prune this model?')
   })
 
@@ -115,24 +115,24 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
   })
 })
 
-describe('ReapResults when only INT4 holds one expert block', () => {
-  it('names INT4 instead of claiming that no precision fits', () => {
+describe('ReapResults when only a 4 bit format holds one expert block', () => {
+  it('names the fitting format instead of claiming that no format fits', () => {
     // DeepSeek-R1 on a 12 GiB RTX 5070. One expert block overflows the card in
-    // BF16 and in FP8, and fits in INT4. The panel used to render the
-    // needs-offload copy, "No weight precision makes this expert block fit",
-    // while the format picker flipped the same card to Fits as soon as INT4 was
-    // selected.
+    // BF16 and in FP8, and fits in NVFP4. The panel used to render the
+    // needs-offload copy, "No weight format makes this expert block fit", while
+    // the format picker flipped the same card to Fits as soon as a 4 bit format
+    // was selected.
     const html = render(deepseekR1Text, {
       gpu: findGpu('rtx-5070') as GpuSpec,
       weightDtype: 'BF16',
     })
-    expect(html).toContain('Needs INT4')
-    expect(html).toContain('fits only in INT4')
-    expect(html).toContain('Change the weight precision to INT4')
-    expect(html).not.toContain('No weight precision makes this expert block fit')
+    expect(html).toContain('Needs NVFP4')
+    expect(html).toContain('fits only in NVFP4')
+    expect(html).toContain('Change the weight format to NVFP4')
+    expect(html).not.toContain('No weight format makes this expert block fit')
   })
 
-  it('still reports that no precision fits when none does', () => {
+  it('still reports that no format fits when none does', () => {
     // Kimi-K2 on a 32 GiB RTX 5090 with a micro batch of 128. The activation
     // buffer alone overflows the card, so no format rescues the run and the
     // panel is right to say so.
@@ -142,7 +142,7 @@ describe('ReapResults when only INT4 holds one expert block', () => {
       microBatchSize: 128,
     })
     expect(html).toContain('Needs offloading')
-    expect(html).toContain('No weight precision makes this expert block fit')
+    expect(html).toContain('No weight format makes this expert block fit')
   })
 })
 
