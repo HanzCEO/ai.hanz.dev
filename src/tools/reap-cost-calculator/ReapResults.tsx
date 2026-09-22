@@ -14,23 +14,37 @@ const VERDICT_LABEL: Record<ReapVerdict, string> = {
   'not-moe': 'Not applicable',
   fits: 'Fits',
   'needs-fp8': 'Needs FP8',
+  'needs-int4': 'Needs INT4',
   'needs-offload': 'Needs offloading',
 }
 
 function verdictClass(verdict: ReapVerdict): string {
   if (verdict === 'fits') return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
   if (verdict === 'needs-fp8') return 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+  if (verdict === 'needs-int4') return 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
   if (verdict === 'needs-offload') return 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
   return ''
 }
 
+/**
+ * One sentence naming the block and the format it fits in, or the miss when no
+ * format fits.
+ *
+ * The verdict and the fitting search are derived together, so a verdict of
+ * needs-fp8 or needs-int4 always carries a figure. The null check keeps the
+ * panel from printing a zero where the engine reported absence.
+ */
 function verdictSentence(result: ReapResult): string {
   const memory = formatBytes(result.vramBytes).text
+  const block = result.bestFittingBlockBytes
   if (result.verdict === 'fits') {
     return `One expert block fits in ${memory}.`
   }
-  if (result.verdict === 'needs-fp8') {
-    return `One expert block fits only in FP8, at ${formatBytes(result.perMoELayerBytes / 2).text}.`
+  if (block !== null && result.verdict === 'needs-fp8') {
+    return `One expert block fits only in FP8, at ${formatBytes(block).text}.`
+  }
+  if (block !== null && result.verdict === 'needs-int4') {
+    return `One expert block fits only in INT4, at ${formatBytes(block).text}.`
   }
   return `One expert block does not fit in ${memory}, even at the narrowest weight precision.`
 }
@@ -192,10 +206,17 @@ export default function ReapResults({ result, shapeState, gpu, computeError }: R
                   expert block plus a {formatBytes(result.activationBytes).text} activation buffer.
                   The peak is therefore {formatBytes(result.peakVramBytes).text}.
                 </p>
-                {result.verdict === 'needs-fp8' && (
+                {result.verdict === 'needs-fp8' && result.bestFittingBlockBytes !== null && (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
                     Change the weight precision to FP8. The expert block then needs{' '}
-                    {formatBytes(result.perMoELayerBytes / 2).text}, and the run becomes possible.
+                    {formatBytes(result.bestFittingBlockBytes).text}, and the run becomes possible.
+                  </p>
+                )}
+                {result.verdict === 'needs-int4' && result.bestFittingBlockBytes !== null && (
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    Change the weight precision to INT4. The expert block then needs{' '}
+                    {formatBytes(result.bestFittingBlockBytes).text}, and the run becomes possible.
+                    INT4 needs a checkpoint that is already quantised to 4 bits.
                   </p>
                 )}
                 {result.verdict === 'needs-offload' && (

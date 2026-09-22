@@ -101,7 +101,8 @@ function notMoeResult(inputs: ReapInputs): ReapResult {
     activationBytes: 0,
     peakVramBytes: 0,
     vramBytes: inputs.gpu.vramGiB * GIB,
-    narrowestFittingDtype: null,
+    bestFittingDtype: null,
+    bestFittingBlockBytes: null,
     pruneRatio: inputs.pruneRatio,
     keptExperts: 0,
     removedExperts: 0,
@@ -166,12 +167,24 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
   const peakForDtype = (dtype: WeightDtype) =>
     perMoELayerParams * bytesPerParam(dtype) + activationBytes + RUNTIME_OVERHEAD_BYTES
 
-  const narrowestFittingDtype =
+  // The order runs from the widest format to the narrowest, so the first one
+  // that fits is the highest precision the card can hold.
+  const bestFittingDtype =
     WEIGHT_DTYPE_ORDER.find((dtype) => peakForDtype(dtype) <= vramBytes) ?? null
 
+  const blockBytesForDtype = (dtype: WeightDtype) =>
+    perMoELayerParams * bytesPerParam(dtype)
+
+  const bestFittingBlockBytes =
+    bestFittingDtype === null ? null : blockBytesForDtype(bestFittingDtype)
+
+  // The verdict follows the same search, so it can never claim that no format
+  // fits while it also names one that does. Each step is one format narrower
+  // than the step above it.
   let verdict: ReapVerdict
   if (peakVramBytes <= vramBytes) verdict = 'fits'
   else if (peakForDtype('FP8') <= vramBytes) verdict = 'needs-fp8'
+  else if (peakForDtype('INT4') <= vramBytes) verdict = 'needs-int4'
   else verdict = 'needs-offload'
 
   // --- What pruning leaves behind -----------------------------------------
@@ -298,7 +311,8 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
     activationBytes,
     peakVramBytes,
     vramBytes,
-    narrowestFittingDtype,
+    bestFittingDtype,
+    bestFittingBlockBytes,
     pruneRatio: ratio,
     keptExperts,
     removedExperts,

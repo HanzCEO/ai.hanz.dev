@@ -74,7 +74,15 @@ export interface ReapInputs {
   scaleTopK: boolean
 }
 
-export type ReapVerdict = 'not-moe' | 'fits' | 'needs-fp8' | 'needs-offload'
+export type ReapVerdict =
+  | 'not-moe'
+  | 'fits'
+  /** BF16 overflows the card but the FP8 block fits it. */
+  | 'needs-fp8'
+  /** BF16 and FP8 overflow the card but the INT4 block fits it. */
+  | 'needs-int4'
+  /** No weight format in the fitting search holds one expert block. */
+  | 'needs-offload'
 
 /** Whether the run is limited by the GPU or by the weight stream. */
 export type ReapBound = 'compute' | 'stream'
@@ -102,8 +110,14 @@ export interface ReapResult {
   activationBytes: number
   peakVramBytes: number
   vramBytes: number
-  /** The narrowest weight format whose block fits, or null when none does. */
-  narrowestFittingDtype: WeightDtype | null
+  /**
+   * The widest weight format whose block fits, or null when none does. The
+   * search runs from BF16 down to INT4, so this is the highest precision the
+   * card can hold and the format the verdict names.
+   */
+  bestFittingDtype: WeightDtype | null
+  /** One expert block in that format, or null when no format fits. */
+  bestFittingBlockBytes: number | null
 
   pruneRatio: number
   keptExperts: number

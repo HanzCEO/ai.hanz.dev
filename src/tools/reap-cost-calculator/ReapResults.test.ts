@@ -51,6 +51,7 @@ function render(configText: string, overrides: Partial<ReapInputs> = {}): string
 }
 
 const glm53Text = readConfigFixtureText('glm-5-3')
+const deepseekR1Text = readConfigFixtureText('deepseek-r1')
 
 describe('ReapResults with a pasted GLM-5.3 config', () => {
   it('renders a time estimate', () => {
@@ -111,6 +112,37 @@ describe('ReapResults with a pasted GLM-5.3 config', () => {
     })
     expect(html).toMatch(/\d+(\.\d+)?\s*(hours|days)/)
     expect(html).toContain('H200')
+  })
+})
+
+describe('ReapResults when only INT4 holds one expert block', () => {
+  it('names INT4 instead of claiming that no precision fits', () => {
+    // DeepSeek-R1 on a 12 GiB RTX 5070. One expert block overflows the card in
+    // BF16 and in FP8, and fits in INT4. The panel used to render the
+    // needs-offload copy, "No weight precision makes this expert block fit",
+    // while the format picker flipped the same card to Fits as soon as INT4 was
+    // selected.
+    const html = render(deepseekR1Text, {
+      gpu: findGpu('rtx-5070') as GpuSpec,
+      weightDtype: 'BF16',
+    })
+    expect(html).toContain('Needs INT4')
+    expect(html).toContain('fits only in INT4')
+    expect(html).toContain('Change the weight precision to INT4')
+    expect(html).not.toContain('No weight precision makes this expert block fit')
+  })
+
+  it('still reports that no precision fits when none does', () => {
+    // Kimi-K2 on a 32 GiB RTX 5090 with a micro batch of 128. The activation
+    // buffer alone overflows the card, so no format rescues the run and the
+    // panel is right to say so.
+    const html = render(readConfigFixtureText('kimi-k2'), {
+      gpu: RTX_5090,
+      weightDtype: 'BF16',
+      microBatchSize: 128,
+    })
+    expect(html).toContain('Needs offloading')
+    expect(html).toContain('No weight precision makes this expert block fit')
   })
 })
 

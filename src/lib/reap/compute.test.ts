@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { findGpu, findStorage } from '../hardware'
+import { GPU_PRESETS, findGpu, findStorage } from '../hardware'
 import type { GpuSpec, StorageSpec } from '../hardware'
 import { loadConfigFixture } from '@/test/fixtures'
 import { reapInputs as inputs } from '@/test/reap'
@@ -8,15 +8,32 @@ import type { RawConfig } from '../model-config'
 
 import { estimateReap } from './compute'
 import { detectMoeShape } from './moe-shape'
-import { bytesPerParam } from './presets'
+import { WEIGHT_DTYPE_ORDER, bytesPerParam } from './presets'
 import { ReapInputError, type MoeShape } from './types'
 
 const fixture = loadConfigFixture
 
 const H200 = findGpu('h200') as GpuSpec
 const RTX_5090 = findGpu('rtx-5090') as GpuSpec
+const RTX_5070 = findGpu('rtx-5070') as GpuSpec
 const NVME = findStorage('nvme-pcie4') as StorageSpec
 const HOST_RAM = findStorage('pcie5-host-ram') as StorageSpec
+
+/** Every fixture that has an expert bank, so a sweep covers each model family. */
+const MOE_FIXTURES = [
+  'deepseek-r1',
+  'deepseek-v32-exp',
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
+  'deepseek-v41-flash',
+  'glm-4-7-flash',
+  'glm-5-3',
+  'gpt-oss-120b',
+  'kimi-k2',
+  'mimo-v26-flash-rl',
+  'mimo-v26-pro-rl',
+  'qwen3-next-80b',
+]
 
 /**
  * Qwen3-30B-A3B as the llm-compressor REAP example describes it: 48 layers, 128
@@ -255,19 +272,50 @@ describe('estimateReap verdicts', () => {
     const result = estimateReap(shape, inputs({ gpu: RTX_5090, weightDtype: 'BF16' }))
     expect(result.verdict).toBe('needs-fp8')
     expect(result.perMoELayerBytes).toBeGreaterThan(result.vramBytes)
-    expect(result.narrowestFittingDtype).toBe('FP8')
+    expect(result.bestFittingDtype).toBe('FP8')
+    // One block in FP8 is half its BF16 size.
+    expect(result.bestFittingBlockBytes).toBe(result.perMoELayerBytes / 2)
+  })
+
+  it('reports needs-int4 when BF16 and FP8 overflow the card but INT4 fits', () => {
+    // DeepSeek-R1 on a 12 GiB RTX 5070: one expert block is about 22.9 GiB in
+    // BF16 and about 12.2 GiB in FP8, so both overflow the card, and about
+    // 6.9 GiB in INT4, which fits. The verdict used to stop at FP8 and report
+    // that no precision fits, which the panel rendered as "No weight precision
+    // makes this expert block fit", while the same card flipped to Fits as soon
+    // as INT4 was selected.
+    const shape = detectMoeShape(fixture('deepseek-r1')) as MoeShape
+    const result = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'BF16' }))
+    expect(result.verdict).toBe('needs-int4')
+    expect(result.bestFittingDtype).toBe('INT4')
+    expect(result.perMoELayerBytes).toBeGreaterThan(result.vramBytes)
+    expect(result.bestFittingBlockBytes).toBeLessThan(result.vramBytes)
+  })
+
+  it('gives the same model and card a fitting verdict once INT4 is selected', () => {
+    // The verdict has to agree with the format picker, so the two selections
+    // can never disagree about the same run.
+    const shape = detectMoeShape(fixture('deepseek-r1')) as MoeShape
+    const bf16 = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'BF16' }))
+    const int4 = estimateReap(shape, inputs({ gpu: RTX_5070, weightDtype: 'INT4' }))
+    expect(bf16.verdict).toBe('needs-int4')
+    expect(int4.verdict).toBe('fits')
+    expect(int4.perMoELayerBytes).toBe(bf16.bestFittingBlockBytes)
   })
 
   it('reports needs-offload when even the narrowest format overflows', () => {
     // Kimi-K2 in FP8 is about 16 GiB a block. A micro batch of 128 samples of
-    // 2048 tokens adds a 28 GiB activation buffer, which no longer fits.
+    // 2048 tokens adds a 28 GiB activation buffer, which no longer fits. INT4
+    // halves the block, and the activation buffer alone is still larger than
+    // the card, so no format rescues the run.
     const shape = detectMoeShape(fixture('kimi-k2')) as MoeShape
     const result = estimateReap(
       shape,
       inputs({ gpu: RTX_5090, weightDtype: 'BF16', microBatchSize: 128 }),
     )
     expect(result.verdict).toBe('needs-offload')
-    expect(result.narrowestFittingDtype).toBeNull()
+    expect(result.bestFittingDtype).toBeNull()
+    expect(result.bestFittingBlockBytes).toBeNull()
   })
 
   it('reports fits when the selected format is already the narrow one', () => {
@@ -276,11 +324,37 @@ describe('estimateReap verdicts', () => {
     expect(result.verdict).toBe('fits')
   })
 
-  it('names the narrowest format that fits', () => {
+  it('names the widest format that fits', () => {
     const shape = detectMoeShape(QWEN3_30B_A3B) as MoeShape
     const result = estimateReap(shape, inputs({ gpu: H200, weightDtype: 'BF16' }))
     // BF16 already fits, so it is the widest format that fits.
-    expect(result.narrowestFittingDtype).toBe('BF16')
+    expect(result.bestFittingDtype).toBe('BF16')
+  })
+
+  it('names a fitting format whenever the verdict is not needs-offload', () => {
+    // The verdict and the fitting search answer the same question, so they can
+    // never contradict each other. Sweeping every fixture against every card
+    // and every format is what catches a verdict that stops short of a format
+    // the search accepts.
+    for (const name of MOE_FIXTURES) {
+      const shape = detectMoeShape(fixture(name)) as MoeShape
+      for (const gpu of GPU_PRESETS) {
+        for (const weightDtype of WEIGHT_DTYPE_ORDER) {
+          const result = estimateReap(shape, inputs({ gpu, weightDtype }))
+          const where = `${name} on ${gpu.id} at ${weightDtype}`
+          if (result.verdict === 'needs-offload') {
+            expect(result.bestFittingDtype, where).toBeNull()
+            expect(result.bestFittingBlockBytes, where).toBeNull()
+          } else {
+            expect(result.bestFittingDtype, where).not.toBeNull()
+            expect(result.bestFittingBlockBytes, where).not.toBeNull()
+            expect(result.bestFittingBlockBytes as number, where).toBeLessThanOrEqual(
+              result.vramBytes,
+            )
+          }
+        }
+      }
+    }
   })
 })
 
