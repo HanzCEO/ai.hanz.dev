@@ -457,6 +457,45 @@ describe('estimateInference explanations', () => {
   })
 })
 
+describe('estimateInference on the MiMo-V2.6 releases', () => {
+  /**
+   * The two MiMo releases are the first fixtures with a hybrid global and
+   * sliding window backbone, so they are the ones that exercise the cache split
+   * and the array-valued moe_layer_freq end to end. The cache figures are the
+   * ones the KV cache engine produces on its own, reached here through the
+   * inference calculator.
+   */
+  const FLASH = loadConfigFixture('mimo-v26-flash-rl')
+  const PRO = loadConfigFixture('mimo-v26-pro-rl')
+
+  it('sizes the MiMo-V2.6-Flash-RL cache through the inference path', () => {
+    const result = estimateInference(shapeOf(FLASH), inputs(FLASH, { contextLength: 32768 }))
+    expect(result.kvCacheBytes).toBe(780_533_760)
+    expect(result.weightsBytes).toBe(308_778_369_024 * BYTES_PER_WEIGHT)
+    expect(result.shape.moeLayers).toBe(47)
+    expect(result.shape.attentionParams).toBe(4_482_662_400)
+  })
+
+  it('sizes the MiMo-V2.6-Pro-RL cache through the inference path', () => {
+    const result = estimateInference(shapeOf(PRO), inputs(PRO, { contextLength: 32768 }))
+    expect(result.kvCacheBytes).toBe(1_717_043_200)
+    expect(result.weightsBytes).toBe(1_021_247_225_856 * BYTES_PER_WEIGHT)
+    expect(result.shape.moeLayers).toBe(69)
+    expect(result.shape.attentionParams).toBe(18_717_081_600)
+  })
+
+  it('recommends a configuration that holds the run, or reports the shortfall', () => {
+    const result = estimateInference(shapeOf(FLASH), inputs(FLASH, { contextLength: 32768 }))
+    if (result.verdict === 'none') {
+      expect(result.recommended).toBeNull()
+      expect(result.closest).not.toBeNull()
+    } else {
+      expect(result.recommended).not.toBeNull()
+      expect(result.recommended?.fits).toBe(true)
+    }
+  })
+})
+
 describe('estimateInference MTP heads', () => {
   /** Every head except none, which is the baseline and not a head at all. */
   const HEADS: MtpHeadType[] = ['sequential-mtp', 'parallel-mtp', 'medusa', 'eagle-3']

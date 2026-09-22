@@ -155,10 +155,14 @@ describe('INFERENCE_SCHEMA', () => {
 
   it('writes the MTP head into the query string under mtp', () => {
     expect(INFERENCE_SCHEMA.mtpHead.param).toBe('mtp')
-    const query = serializeState(INFERENCE_SCHEMA, { ...DEFAULTS, mtpHead: 'medusa' })
+    // Declared with the input type so the literal is not widened to string,
+    // which would make the schema argument fail to type check.
+    const medusa: InferenceFormInputs = { ...DEFAULTS, mtpHead: 'medusa' }
+    const query = serializeState(INFERENCE_SCHEMA, medusa)
     expect(new URLSearchParams(query).get('mtp')).toBe('medusa')
     // The default head is the baseline, so it writes nothing at all.
-    expect(serializeState(INFERENCE_SCHEMA, { ...DEFAULTS, mtpHead: 'none' })).toBe('')
+    const baseline: InferenceFormInputs = { ...DEFAULTS, mtpHead: 'none' }
+    expect(serializeState(INFERENCE_SCHEMA, baseline)).toBe('')
   })
 
   it('accepts the cache dtypes the cache layer offers', () => {

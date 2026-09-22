@@ -1,6 +1,7 @@
 import {
   dtypeNameToBytes,
   readBoolean,
+  readFlagArray,
   readNumber,
   readNumberArray,
   readObject,
@@ -112,6 +113,9 @@ const GQA_TYPES = new Set([
   'hy_v3',
   'inkling_mm_model',
   'minimax_m2',
+  // MiMo-V2.6 is a grouped query model with a hybrid global and sliding
+  // attention backbone. Its two geometries live in hybrid_layer_pattern.
+  'mimo_v2',
 ])
 
 const FAMILY_LABELS: Record<ArchitectureFamily, string> = {
@@ -258,6 +262,39 @@ function countCompressed(ratios: number[]): Array<{ ratio: number; layers: numbe
 // Family formulas
 // ---------------------------------------------------------------------------
 
+/**
+ * Bytes for one cached entry in one grouped query attention layer.
+ *
+ * The key is stored at head_dim and the value at v_head_dim. The two are equal
+ * on most releases, but MiMo-V2.6 keeps a 192 wide key and a 128 wide value, so
+ * reading one width for both overstates the cache by a fifth. A model that sets
+ * attention_k_eq_v stores one vector and reuses it, so the value adds nothing.
+ */
+function gqaEntryBytes(
+  kvHeads: number,
+  headDim: number,
+  vHeadDim: number,
+  kvBytes: number,
+  kEqV: boolean,
+): number {
+  const valueBytes = kEqV ? 0 : kvHeads * vHeadDim * kvBytes
+  return kvHeads * headDim * kvBytes + valueBytes
+}
+
+/** The arithmetic chain for one grouped query attention layer. */
+function gqaFormula(
+  kvHeads: number,
+  headDim: number,
+  vHeadDim: number,
+  kvBytes: number,
+  kEqV: boolean,
+): string {
+  if (kEqV) {
+    return `${kvHeads} kv heads x ${headDim} head dim x ${kvBytes} bytes, with one shared key and value vector`
+  }
+  return `${kvHeads} kv heads x (${headDim} key dim + ${vHeadDim} value dim) x ${kvBytes} bytes`
+}
+
 function computeGqa(
   inner: RawConfig,
   options: ComputeOptions,
@@ -279,6 +316,10 @@ function computeGqa(
 
   const kvHeads = readNumber(inner, 'num_key_value_heads') ?? numHeads
   const headDim = readNumber(inner, 'head_dim') ?? Math.floor((hiddenSize ?? 0) / numHeads)
+  // The value projection is often narrower than the query and key projection.
+  // MiMo-V2.6 stores a key of 192 and a value of 128, and the two widths differ
+  // in the cache, so the value width cannot be assumed from the key width.
+  const vHeadDim = readNumber(inner, 'v_head_dim') ?? headDim
 
   if (!headDim || headDim <= 0) {
     throw new KvCacheInputError(
@@ -300,10 +341,12 @@ function computeGqa(
       source: readNumber(inner, 'head_dim') === undefined ? 'derived from hidden_size / num_attention_heads' : 'config',
     },
   )
+  if (readNumber(inner, 'v_head_dim') !== undefined && vHeadDim !== headDim) {
+    constants.push({ key: 'v_head_dim', value: vHeadDim, source: 'config' })
+  }
 
   // Some architectures store one vector and reuse it for both key and value.
   const kEqV = readBoolean(inner, 'attention_k_eq_v') === true
-  const kvMultiplier = kEqV ? 1 : 2
   if (kEqV) {
     assumptions.push(
       'attention_k_eq_v is set, so key and value share one vector and the cache is counted once per layer rather than twice.',
@@ -314,6 +357,7 @@ function computeGqa(
   const slidingWindow = readNumber(inner, 'sliding_window')
   const globalHeadDim = readNumber(inner, 'global_head_dim')
   const globalKvHeads = readNumber(inner, 'num_global_key_value_heads')
+  const hybridPattern = readFlagArray(inner, 'hybrid_layer_pattern')
 
   const kinds: LayerKind[] = []
 
@@ -328,10 +372,10 @@ function computeGqa(
       const fullKvHeads = globalKvHeads ?? kvHeads
       kinds.push({
         label: 'full attention layers',
-        bytesPerEntry: kvMultiplier * fullKvHeads * fullHeadDim * kvBytes,
+        bytesPerEntry: gqaEntryBytes(fullKvHeads, fullHeadDim, vHeadDim, kvBytes, kEqV),
         entriesPerSequence: contextLength,
         layers: fullCount,
-        formula: `${kvMultiplier} x ${fullKvHeads} kv heads x ${fullHeadDim} head dim x ${kvBytes} bytes`,
+        formula: gqaFormula(fullKvHeads, fullHeadDim, vHeadDim, kvBytes, kEqV),
       })
       if (globalHeadDim || globalKvHeads) {
         constants.push(
@@ -358,10 +402,10 @@ function computeGqa(
       const entries = Math.min(contextLength, window)
       kinds.push({
         label: 'sliding window layers',
-        bytesPerEntry: kvMultiplier * kvHeads * headDim * kvBytes,
+        bytesPerEntry: gqaEntryBytes(kvHeads, headDim, vHeadDim, kvBytes, kEqV),
         entriesPerSequence: entries,
         layers: slidingCount,
-        formula: `${kvMultiplier} x ${kvHeads} kv heads x ${headDim} head dim x ${kvBytes} bytes`,
+        formula: gqaFormula(kvHeads, headDim, vHeadDim, kvBytes, kEqV),
       })
       constants.push({ key: 'sliding_window', value: window, source: slidingWindow ? 'config' : 'assumed equal to context length' })
       if (entries < contextLength) {
@@ -370,15 +414,83 @@ function computeGqa(
         )
       }
     }
+  } else if (hybridPattern && hybridPattern.length >= numLayers) {
+    // A hybrid backbone runs two attention geometries side by side. The pattern
+    // names one role per block: 0 is a global attention block, which caches the
+    // whole context, and 1 is a sliding window block, which caches only its
+    // window. MiMo-V2.6 is built this way, and it also gives each geometry its
+    // own head counts and head widths under the swa_ prefix.
+    const flags = hybridPattern.slice(0, numLayers)
+    const slidingCount = flags.filter(Boolean).length
+    const fullCount = numLayers - slidingCount
+
+    const fullHeadDim = globalHeadDim ?? headDim
+    const fullKvHeads = globalKvHeads ?? kvHeads
+
+    if (fullCount > 0) {
+      kinds.push({
+        label: 'global attention layers',
+        bytesPerEntry: gqaEntryBytes(fullKvHeads, fullHeadDim, vHeadDim, kvBytes, kEqV),
+        entriesPerSequence: contextLength,
+        layers: fullCount,
+        formula: gqaFormula(fullKvHeads, fullHeadDim, vHeadDim, kvBytes, kEqV),
+      })
+    }
+
+    if (slidingCount > 0) {
+      const swaHeads = readNumber(inner, 'swa_num_attention_heads') ?? numHeads
+      const swaKvHeads = readNumber(inner, 'swa_num_key_value_heads') ?? kvHeads
+      const swaHeadDim = readNumber(inner, 'swa_head_dim') ?? headDim
+      const swaVHeadDim = readNumber(inner, 'swa_v_head_dim') ?? vHeadDim
+
+      if (!slidingWindow || slidingWindow <= 0) {
+        assumptions.push(
+          'hybrid_layer_pattern marks layers as sliding but the config has no sliding_window, so those layers were counted at the full context length.',
+        )
+      }
+      const window = slidingWindow && slidingWindow > 0 ? slidingWindow : contextLength
+      const entries = Math.min(contextLength, window)
+      kinds.push({
+        label: 'sliding window layers',
+        bytesPerEntry: gqaEntryBytes(swaKvHeads, swaHeadDim, swaVHeadDim, kvBytes, kEqV),
+        entriesPerSequence: entries,
+        layers: slidingCount,
+        formula: gqaFormula(swaKvHeads, swaHeadDim, swaVHeadDim, kvBytes, kEqV),
+      })
+      constants.push(
+        { key: 'sliding_window', value: window, source: slidingWindow ? 'config' : 'assumed equal to context length' },
+      )
+      if (entries < contextLength) {
+        assumptions.push(
+          `Sliding window layers hold at most ${window} entries per sequence, so they stop growing past that point.`,
+        )
+      }
+      if (swaHeads !== numHeads || swaHeadDim !== headDim || swaVHeadDim !== vHeadDim) {
+        constants.push(
+          { key: 'swa_num_attention_heads', value: swaHeads, source: readNumber(inner, 'swa_num_attention_heads') === undefined ? 'assumed equal to num_attention_heads' : 'config' },
+          { key: 'swa_num_key_value_heads', value: swaKvHeads, source: readNumber(inner, 'swa_num_key_value_heads') === undefined ? 'assumed equal to num_key_value_heads' : 'config' },
+          { key: 'swa_head_dim', value: swaHeadDim, source: readNumber(inner, 'swa_head_dim') === undefined ? 'assumed equal to head_dim' : 'config' },
+        )
+      }
+    }
+
+    constants.push({
+      key: 'hybrid_layer_pattern',
+      value: `${fullCount} global / ${slidingCount} sliding`,
+      source: 'config',
+    })
+    assumptions.push(
+      'The layer roles come from hybrid_layer_pattern: 0 marks a global attention block and 1 marks a sliding window block. The two geometries are sized separately, so the global blocks grow with the context and the sliding blocks stop at their window.',
+    )
   } else if (slidingWindow && slidingWindow > 0) {
     // No per layer types, but the model applies one window everywhere.
     const entries = Math.min(contextLength, slidingWindow)
     kinds.push({
       label: 'sliding window layers',
-      bytesPerEntry: kvMultiplier * kvHeads * headDim * kvBytes,
+      bytesPerEntry: gqaEntryBytes(kvHeads, headDim, vHeadDim, kvBytes, kEqV),
       entriesPerSequence: entries,
       layers: numLayers,
-      formula: `${kvMultiplier} x ${kvHeads} kv heads x ${headDim} head dim x ${kvBytes} bytes`,
+      formula: gqaFormula(kvHeads, headDim, vHeadDim, kvBytes, kEqV),
     })
     constants.push({ key: 'sliding_window', value: slidingWindow, source: 'config' })
     assumptions.push(
@@ -387,14 +499,16 @@ function computeGqa(
   } else {
     kinds.push({
       label: 'attention layers',
-      bytesPerEntry: kvMultiplier * kvHeads * headDim * kvBytes,
+      bytesPerEntry: gqaEntryBytes(kvHeads, headDim, vHeadDim, kvBytes, kEqV),
       entriesPerSequence: contextLength,
       layers: numLayers,
-      formula: `${kvMultiplier} x ${kvHeads} kv heads x ${headDim} head dim x ${kvBytes} bytes`,
+      formula: gqaFormula(kvHeads, headDim, vHeadDim, kvBytes, kEqV),
     })
   }
 
-  const fullAttention = kinds.find((kind) => kind.label.startsWith('full'))?.layers ?? 0
+  const fullAttention =
+    (kinds.find((kind) => kind.label.startsWith('full'))?.layers ?? 0) +
+    (kinds.find((kind) => kind.label.startsWith('global'))?.layers ?? 0)
   const slidingAttention = kinds.find((kind) => kind.label.startsWith('sliding'))?.layers ?? 0
   const plainAttention = kinds.find((kind) => kind.label === 'attention layers')?.layers ?? 0
 

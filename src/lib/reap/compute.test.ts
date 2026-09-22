@@ -99,6 +99,77 @@ describe('detectMoeShape on the MoE fixtures', () => {
   })
 })
 
+describe('detectMoeShape on the MiMo-V2.6 releases', () => {
+  /**
+   * Both releases write moe_layer_freq as a per layer array, not as a number,
+   * and both leave the first block dense. Reading the array as a scalar would
+   * count every block as an expert block, so these numbers pin the difference.
+   */
+  it('counts 47 expert blocks in MiMo-V2.6-Flash-RL', () => {
+    const flash = detectMoeShape(fixture('mimo-v26-flash-rl')) as MoeShape
+    expect(flash).not.toBeNull()
+    expect(flash.modelType).toBe('mimo_v2')
+    expect(flash.numLayers).toBe(48)
+    expect(flash.moeLayers).toBe(47)
+    expect(flash.denseLayers).toBe(1)
+    expect(flash.routedExperts).toBe(256)
+    expect(flash.expertsPerToken).toBe(8)
+    expect(flash.sharedExperts).toBe(0)
+    expect(flash.moeIntermediateSize).toBe(2048)
+    // 309B total, the figure the model card publishes.
+    expect(flash.totalParams).toBe(308_778_369_024)
+    // The active path is the attention of every block, the one dense block's
+    // feed forward, and the 8 experts of 256 that a token reaches in each of
+    // the 47 expert blocks. It is the same figure the model shape detector
+    // reports, since neither model has a shared expert.
+    expect(flash.activeParamsPerToken).toBe(14_146_338_816)
+    expect(flash.activeParamsPerToken).toBeLessThan(flash.totalParams / 20)
+  })
+
+  it('counts 69 expert blocks in MiMo-V2.6-Pro-RL', () => {
+    const pro = detectMoeShape(fixture('mimo-v26-pro-rl')) as MoeShape
+    expect(pro).not.toBeNull()
+    expect(pro.numLayers).toBe(70)
+    expect(pro.moeLayers).toBe(69)
+    expect(pro.denseLayers).toBe(1)
+    expect(pro.routedExperts).toBe(384)
+    expect(pro.expertsPerToken).toBe(8)
+    expect(pro.sharedExperts).toBe(0)
+    // 1.02T total, the figure the model card publishes.
+    expect(pro.totalParams).toBe(1_021_247_225_856)
+  })
+
+  it('costs a REAP run against both releases', () => {
+    for (const name of ['mimo-v26-flash-rl', 'mimo-v26-pro-rl']) {
+      const shape = detectMoeShape(fixture(name)) as MoeShape
+      const result = estimateReap(shape, inputs())
+      expect(result.moe).toBe(true)
+      expect(result.verdict).toBe('fits')
+      expect(result.keptExperts).toBeGreaterThan(0)
+      expect(result.keptExperts).toBeLessThan(shape.routedExperts)
+      expect(result.removedExperts).toBe(shape.routedExperts - result.keptExperts)
+      expect(result.totalParamsAfter).toBeLessThan(shape.totalParams)
+    }
+  })
+
+  it('reports no change in the active path when the top-k is kept', () => {
+    // Both releases have one dense block, whose feed forward a token reads
+    // whether or not experts are pruned. Counting it on one side only would
+    // make the panel claim a speedup that the recipe does not deliver.
+    for (const name of ['mimo-v26-flash-rl', 'mimo-v26-pro-rl']) {
+      const shape = detectMoeShape(fixture(name)) as MoeShape
+      expect(shape.denseLayers).toBe(1)
+      expect(shape.denseFfnParams).toBeGreaterThan(0)
+
+      const kept = estimateReap(shape, inputs({ scaleTopK: false }))
+      expect(kept.activeParamsPerTokenAfter).toBe(shape.activeParamsPerToken)
+
+      const scaled = estimateReap(shape, inputs({ scaleTopK: true }))
+      expect(scaled.activeParamsPerTokenAfter).toBeLessThan(shape.activeParamsPerToken)
+    }
+  })
+})
+
 describe('estimateReap on the anchor model', () => {
   const shape = detectMoeShape(QWEN3_30B_A3B) as MoeShape
 

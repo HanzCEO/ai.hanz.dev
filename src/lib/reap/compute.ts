@@ -203,8 +203,12 @@ export function estimateReap(shape: MoeShape | null, inputs: ReapInputs): ReapRe
   const reductionPercent =
     shape.totalParams > 0 ? ((shape.totalParams - totalParamsAfter) / shape.totalParams) * 100 : 0
 
+  // Pruning changes only the expert bank, so the dense blocks are the same
+  // before and after. They are carried through so this figure stays comparable
+  // with the before figure, which counts them too.
   const activeParamsPerTokenAfter =
     shape.attentionParams +
+    shape.denseFfnParams +
     shape.moeLayers *
       (expertsPerTokenAfter * shape.paramsPerExpert +
         shape.sharedExperts * shape.paramsPerSharedExpert)

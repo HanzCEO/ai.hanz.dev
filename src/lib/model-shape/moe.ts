@@ -1,4 +1,11 @@
-import { readBoolean, readNumber, readNumberFrom, readStringArray, unwrapConfig } from '../model-config'
+import {
+  readBoolean,
+  readFlagArray,
+  readNumber,
+  readNumberFrom,
+  readStringArray,
+  unwrapConfig,
+} from '../model-config'
 import type { RawConfig } from '../model-config'
 
 /**
@@ -135,6 +142,21 @@ export function countMoeLayers(
 
   // Layers that are explicitly dense are subtracted from the total.
   const denseOnly = readStringArray(inner, 'mlp_only_layers')?.length ?? 0
+
+  // A per layer flag list is the next most explicit form. MiMo-V2.6 writes
+  // moe_layer_freq as an array rather than a number, where a truthy entry marks
+  // a block that holds an expert bank. Read before the scalar form so the array
+  // is never mistaken for a repetition interval.
+  const freqFlags = readFlagArray(inner, 'moe_layer_freq')
+  if (freqFlags) {
+    if (freqFlags.length !== numLayers) {
+      notes.push(
+        `moe_layer_freq has ${freqFlags.length} entries for ${numLayers} layers. The first ${Math.min(freqFlags.length, numLayers)} were used.`,
+      )
+    }
+    const expertBlocks = freqFlags.slice(0, numLayers).filter(Boolean).length
+    return Math.max(0, expertBlocks - denseOnly)
+  }
 
   const firstKDense = readNumber(inner, 'first_k_dense_replace')
   if (firstKDense !== undefined) {

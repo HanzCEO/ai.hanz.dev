@@ -2,6 +2,7 @@ export {
   dtypeNameToBytes,
   readArrayFrom,
   readBoolean,
+  readFlagArray,
   readNumber,
   readNumberArray,
   readNumberFrom,

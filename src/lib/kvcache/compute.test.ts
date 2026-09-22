@@ -174,6 +174,84 @@ describe('sliding window layers', () => {
   })
 })
 
+describe('a hybrid global and sliding window backbone', () => {
+  /**
+   * MiMo-V2.6-Flash-RL, hand worked from the fixture.
+   *
+   * 48 blocks: hybrid_layer_pattern marks 9 as global attention and 39 as
+   * sliding window. The global blocks hold 4 key and value heads, the sliding
+   * blocks hold 8, and both store a 192 wide key and a 128 wide value. The
+   * window is 128 tokens.
+   *
+   *   global entry  4*(192+128)*2 = 2560 bytes
+   *   global        9 * 2560 * 32768 =   754,974,720
+   *   sliding entry 8*(192+128)*2 = 5120 bytes
+   *   sliding       39 * 5120 * 128  =    25,559,040
+   *   total                          =   780,533,760
+   */
+  it('sizes the global layers at the context and the sliding layers at the window', () => {
+    const result = computeKvCache(fixture('mimo-v26-flash-rl'), {
+      contextLength: 32768,
+      sequenceCount: 1,
+      kvCacheDtype: 'BF16',
+    })
+
+    expect(result.architecture.family).toBe('gqa')
+    expect(result.architecture.modelType).toBe('mimo_v2')
+    expect(result.bestEffort).toBe(false)
+    expect(result.layerSplit.total).toBe(48)
+    expect(result.layerSplit.fullAttention).toBe(9)
+    expect(result.layerSplit.slidingAttention).toBe(39)
+
+    const global = 9 * 4 * (192 + 128) * 2 * 32768
+    const sliding = 39 * 8 * (192 + 128) * 2 * 128
+    expect(result.totalBytes).toBe(global + sliding)
+    expect(result.totalBytes).toBe(780_533_760)
+    expect(result.assumptions.join(' ')).toMatch(/hybrid_layer_pattern/)
+  })
+
+  it('sizes MiMo-V2.6-Pro-RL the same way', () => {
+    const result = computeKvCache(fixture('mimo-v26-pro-rl'), {
+      contextLength: 32768,
+      sequenceCount: 1,
+      kvCacheDtype: 'BF16',
+    })
+
+    expect(result.layerSplit.total).toBe(70)
+    expect(result.layerSplit.fullAttention).toBe(10)
+    expect(result.layerSplit.slidingAttention).toBe(60)
+
+    const global = 10 * 8 * (192 + 128) * 2 * 32768
+    const sliding = 60 * 8 * (192 + 128) * 2 * 128
+    expect(result.totalBytes).toBe(global + sliding)
+    expect(result.totalBytes).toBe(1_717_043_200)
+  })
+
+  it('grows only the global layers when the context grows', () => {
+    const short = computeKvCache(fixture('mimo-v26-flash-rl'), {
+      contextLength: 8192,
+      kvCacheDtype: 'BF16',
+    })
+    const long = computeKvCache(fixture('mimo-v26-flash-rl'), {
+      contextLength: 32768,
+      kvCacheDtype: 'BF16',
+    })
+    const globalEntry = 4 * (192 + 128) * 2
+    expect(long.totalBytes - short.totalBytes).toBe(9 * globalEntry * (32768 - 8192))
+  })
+
+  it('records the two geometries as constants', () => {
+    const result = computeKvCache(fixture('mimo-v26-flash-rl'), { contextLength: 32768 })
+    const keys = result.constants.map((entry) => entry.key)
+    expect(keys).toContain('hybrid_layer_pattern')
+    expect(keys).toContain('v_head_dim')
+    expect(keys).toContain('sliding_window')
+    expect(result.constants.find((entry) => entry.key === 'hybrid_layer_pattern')?.value).toBe(
+      '9 global / 39 sliding',
+    )
+  })
+})
+
 describe('architecture specific handling', () => {
   it('counts a shared key and value vector once when attention_k_eq_v is set', () => {
     const result = computeKvCache(fixture('gemma-4-31b'), {

@@ -1,7 +1,7 @@
 import { readBoolean, readNumber, unwrapConfig } from '../model-config'
 import type { RawConfig } from '../model-config'
 
-import { attentionParamsPerLayer } from './attention'
+import { attentionParamsPerLayer, attentionParamsTotal } from './attention'
 import { readMoeShapeFields } from './moe'
 
 /**
@@ -141,7 +141,7 @@ export function detectModelShape(config: RawConfig): ModelShape | null {
   const paramsPerExpert = 3 * hiddenSize * moeIntermediateSize
   const paramsPerSharedExpert = 3 * hiddenSize * sharedExpertIntermediate
 
-  const attentionParams = numLayers * attention
+  const attentionParams = attentionParamsTotal(config)
   const denseFfnParams = denseLayers * 3 * hiddenSize * intermediateSize
   const routedExpertParams = moeLayers * routedExperts * paramsPerExpert
   const sharedExpertParams = moeLayers * sharedExperts * paramsPerSharedExpert

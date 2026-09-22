@@ -4,6 +4,7 @@ import {
   dtypeNameToBytes,
   readArrayFrom,
   readBoolean,
+  readFlagArray,
   readNumber,
   readNumberArray,
   readNumberFrom,
@@ -46,6 +47,32 @@ describe('readNumberArray and readStringArray', () => {
     expect(readNumberArray({ ratios: [2, 'four'] }, 'ratios')).toBeUndefined()
     expect(readNumberArray({ ratios: [] }, 'ratios')).toBeUndefined()
     expect(readStringArray({ types: [] }, 'types')).toBeUndefined()
+  })
+})
+
+describe('readFlagArray', () => {
+  it('reads a boolean array as it stands', () => {
+    expect(readFlagArray({ pattern: [true, false] }, 'pattern')).toEqual([true, false])
+  })
+
+  it('reads a zero and one array, which is how MiMo-V2.6 writes it', () => {
+    expect(readFlagArray({ moe_layer_freq: [0, 1, 1] }, 'moe_layer_freq')).toEqual([
+      false,
+      true,
+      true,
+    ])
+  })
+
+  it('rejects a scalar, an empty array, a mixed array, and null', () => {
+    expect(readFlagArray({ freq: 1 }, 'freq')).toBeUndefined()
+    expect(readFlagArray({ freq: [] }, 'freq')).toBeUndefined()
+    expect(readFlagArray({ freq: [0, true] }, 'freq')).toBeUndefined()
+    expect(readFlagArray({ freq: null }, 'freq')).toBeUndefined()
+    expect(readFlagArray({}, 'freq')).toBeUndefined()
+  })
+
+  it('treats a non-finite number entry as unusable rather than truthy', () => {
+    expect(readFlagArray({ freq: [0, Number.NaN] }, 'freq')).toBeUndefined()
   })
 })
 

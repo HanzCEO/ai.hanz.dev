@@ -1,6 +1,6 @@
 import { readBoolean, readNumber, readNumberArray, unwrapConfig } from '../model-config'
 import type { RawConfig } from '../model-config'
-import { attentionParamsPerLayer } from '../model-shape'
+import { attentionParamsPerLayer, attentionParamsTotal } from '../model-shape'
 import { readMoeShapeFields } from '../model-shape/moe'
 
 import type { DsparkTargetShape } from './types'
@@ -96,12 +96,17 @@ export function detectDsparkShape(config: RawConfig): DsparkTargetShape | null {
   // SwiGLU experts carry three projections: gate, up, and down.
   const paramsPerExpert = 3 * hiddenSize * moeIntermediateSize
 
-  const attentionParams = numLayers * attention
+  const attentionParams = attentionParamsTotal(config)
   const denseFfnParams = denseLayers * 3 * hiddenSize * intermediateSize
   const routedExpertParams = moeLayers * routedExperts * paramsPerExpert
+  const routerParams = moeLayers * hiddenSize * routedExperts
   const embedParams = vocabSize * hiddenSize * (tiedEmbeddings ? 1 : 2)
 
-  const totalParams = attentionParams + denseFfnParams + routedExpertParams + embedParams
+  // The router weights are resident like every other weight, so they belong in
+  // the checkpoint figure. Online mode streams this figure through the GPU, so
+  // leaving them out would understate what has to be read.
+  const totalParams =
+    attentionParams + denseFfnParams + routedExpertParams + routerParams + embedParams
 
   // The router is a single small matmul per block, well under one percent of a
   // block here, so it is left out to keep the top-k's effect on compute visible.

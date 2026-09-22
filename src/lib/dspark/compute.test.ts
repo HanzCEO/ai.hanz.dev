@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { findGpu, findStorage } from '../hardware'
 import type { GpuSpec, StorageSpec } from '../hardware'
 import type { RawConfig } from '../model-config'
+import { loadConfigFixture } from '@/test/fixtures'
 
 import { estimateDspark } from './compute'
 import {
@@ -184,6 +185,37 @@ describe('detectDsparkShape', () => {
     expect(moe.routedExperts).toBe(128)
     // Only the routed experts a token reaches count toward active parameters.
     expect(moe.activeParamsPerToken).toBeLessThan(moe.totalParams / 8)
+  })
+
+  it('reads both MiMo-V2.6 releases as targets', () => {
+    // Both write moe_layer_freq as a per layer array and both leave the first
+    // block dense, so 47 of 48 and 69 of 70 blocks hold an expert bank.
+    const flash = detectDsparkShape(loadConfigFixture('mimo-v26-flash-rl'))
+    expect(flash?.modelType).toBe('mimo_v2')
+    expect(flash?.hiddenSize).toBe(4096)
+    expect(flash?.numLayers).toBe(48)
+    expect(flash?.moeLayers).toBe(47)
+    expect(flash?.totalParams).toBe(308_778_369_024)
+    expect(flash?.looksLikeDraftConfig).toBe(false)
+
+    const pro = detectDsparkShape(loadConfigFixture('mimo-v26-pro-rl'))
+    expect(pro?.hiddenSize).toBe(6144)
+    expect(pro?.numLayers).toBe(70)
+    expect(pro?.moeLayers).toBe(69)
+    expect(pro?.totalParams).toBe(1_021_247_225_856)
+  })
+
+  it('costs a DSpark run against both MiMo targets', () => {
+    for (const name of ['mimo-v26-flash-rl', 'mimo-v26-pro-rl']) {
+      const shape = shapeFrom(loadConfigFixture(name))
+      const result = estimateDspark(shape, inputs())
+      expect(result.draftParams).toBeGreaterThan(0)
+      expect(result.draftParams).toBeLessThan(shape.totalParams)
+      expect(result.verdict).toBeDefined()
+      // The draft backbone is 5 layers against a 48 or 70 layer target, so the
+      // drafter is a small fraction of the target it attaches to.
+      expect(result.draftParams).toBeLessThan(shape.totalParams / 8)
+    }
   })
 })
 

@@ -20,6 +20,14 @@ export type { ModelPreset }
 export const MODEL_PRESETS: ModelPreset[] = [
   // Frontier open-weight models, strongest first.
   { id: 'moonshotai/Kimi-K3', note: 'Hybrid KDA, 24 of 93 layers keep a latent cache' },
+  {
+    id: 'XiaomiMiMo/MiMo-V2.6-Pro-RL',
+    note: 'Hybrid global and sliding window attention, 10 of 70 layers hold a global cache, 69 of 70 layers hold experts',
+  },
+  {
+    id: 'XiaomiMiMo/MiMo-V2.6-Flash-RL',
+    note: 'Hybrid global and sliding window attention, 9 of 48 layers hold a global cache, 47 of 48 layers hold experts',
+  },
   { id: 'ornith-ai/Ornith-1.5-397B', note: 'Hybrid linear MoE, 15 of 60 layers cache attention' },
   { id: 'Qwen/Qwen3.8-2.4T-A95B', note: 'Hybrid linear MoE, 23 of 92 layers cache attention' },
   { id: 'tencent/Hy4-preview', note: 'MLA with a sparse indexer cache, 78 layers' },

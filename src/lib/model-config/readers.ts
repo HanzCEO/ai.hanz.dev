@@ -34,6 +34,26 @@ export function readStringArray(config: RawConfig, key: string): string[] | unde
   return undefined
 }
 
+/**
+ * Reads a per layer flag list as booleans.
+ *
+ * Releases describe the same pattern in two ways: an array of booleans, and an
+ * array of zeros and ones. MiMo-V2.6 writes moe_layer_freq as [0, 1, 1, ...],
+ * and hybrid_layer_pattern as [0, 1, 1, ...] where 0 marks a global attention
+ * layer and 1 marks a sliding window one. Both forms mean the same thing here,
+ * so a numeric entry is read as Boolean(value). A mixed array is rejected
+ * rather than guessed at, and an empty array carries no pattern at all.
+ */
+export function readFlagArray(config: RawConfig, key: string): boolean[] | undefined {
+  const value = config[key]
+  if (!Array.isArray(value) || value.length === 0) return undefined
+  if (value.every((item) => typeof item === 'boolean')) return value as boolean[]
+  if (value.every((item) => typeof item === 'number' && Number.isFinite(item))) {
+    return (value as number[]).map((item) => item !== 0)
+  }
+  return undefined
+}
+
 export function readString(config: RawConfig, key: string): string | undefined {
   const value = config[key]
   return typeof value === 'string' ? value : undefined

@@ -1,4 +1,4 @@
-import { attentionParamsPerLayer } from '../model-shape'
+import { attentionParamsPerLayer, attentionParamsTotal } from '../model-shape'
 import { readMoeShapeFields } from '../model-shape/moe'
 import type { RawConfig } from '../model-config'
 
@@ -51,7 +51,7 @@ export function detectMoeShape(config: RawConfig): MoeShape | null {
   const sharedExpertParamsPerLayer = sharedExperts * paramsPerSharedExpert
   const topK = expertsPerToken ?? 1
 
-  const attentionParams = numLayers * attention
+  const attentionParams = attentionParamsTotal(config)
   const routedExpertParams = moeLayers * routedExperts * paramsPerExpert
   const sharedExpertParams = moeLayers * sharedExpertParamsPerLayer
   const denseFfnParams = denseLayers * denseFfnParamsPerLayer
@@ -59,11 +59,16 @@ export function detectMoeShape(config: RawConfig): MoeShape | null {
 
   const embedParams = vocabSize * hiddenSize * (tiedEmbeddings ? 1 : 2)
 
-  // The router is a single small matmul per layer, well under one percent of a
-  // layer here. Leaving it out of the active figure keeps the effect of the
-  // router top-k on compute visible, which is the question this tool answers.
+  // Every block runs its attention, and the blocks that are not expert blocks
+  // run a plain dense feed forward instead. A token therefore reads both, so
+  // both are in the active figure. The router is a single small matmul per
+  // layer, well under one percent of a layer here. Leaving it out keeps the
+  // effect of the router top-k on compute visible, which is the question this
+  // tool answers.
   const activeParamsPerToken =
-    attentionParams + moeLayers * (topK * paramsPerExpert + sharedExpertParamsPerLayer)
+    attentionParams +
+    denseFfnParams +
+    moeLayers * (topK * paramsPerExpert + sharedExpertParamsPerLayer)
 
   const totalParams =
     attentionParams +
