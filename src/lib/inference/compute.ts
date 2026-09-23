@@ -141,8 +141,12 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
   // The activation buffer is sized on the widest live tensor of a decode step.
   // It stays in full on every card, because each rank holds its own slice of
   // the batch rather than a slice of the buffer.
-  const activationBytes =
-    sequences * contextLength * shape.hiddenSize * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR
+  //
+  // The bytes one sequence adds for each token of context are also the growth
+  // term the room to grow section divides, so the two share one expression.
+  const activationBytesPerToken =
+    shape.hiddenSize * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR
+  const activationBytes = sequences * contextLength * activationBytesPerToken
   const runtimeReserveBytes = RUNTIME_OVERHEAD_BYTES
   const totalBytes = weightsBytes + kvCacheBytes + activationBytes + runtimeReserveBytes
 
@@ -241,16 +245,27 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
 
   // --- Room to grow -------------------------------------------------------
   //
-  // The KV cache is the only term that grows with the context and the sequence
-  // count, so the free VRAM converts into one of the two directly.
+  // Two terms grow with the context and the sequence count. The KV cache
+  // divides across the tensor-parallel ranks, so one card carries a share of
+  // it. The activation buffer does not divide, so one card carries all of it.
+  // The free VRAM therefore converts into the largest context, or the largest
+  // sequence count, whose true per-card footprint still fits.
   const kvHeadroomBytes = recommended?.headroomBytes ?? 0
+  // The bytes one card adds for each extra token of context in one sequence.
+  const perCardGrowthPerToken = recommended
+    ? kvBytesPerToken / recommended.gpuCount + activationBytesPerToken
+    : 0
+  // One more context token costs that much in each sequence in flight, and one
+  // more sequence costs it in each token of the context.
+  const contextGrowth = sequences * perCardGrowthPerToken
+  const sequenceGrowth = contextLength * perCardGrowthPerToken
   const maxContextAtSequences =
-    recommended && kvBytesPerToken > 0
-      ? contextLength + Math.floor(kvHeadroomBytes / (kvBytesPerToken * sequences))
+    recommended && contextGrowth > 0
+      ? contextLength + Math.floor(kvHeadroomBytes / contextGrowth)
       : null
   const maxSequencesAtContext =
-    recommended && kvBytesPerToken > 0
-      ? sequences + Math.floor(kvHeadroomBytes / (kvBytesPerToken * contextLength))
+    recommended && sequenceGrowth > 0
+      ? sequences + Math.floor(kvHeadroomBytes / sequenceGrowth)
       : null
 
   // --- Explanations -------------------------------------------------------
@@ -308,7 +323,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     {
       label: 'Room to grow',
       detail: recommended
-        ? `The recommendation leaves ${formatBytes(kvHeadroomBytes).text} free on one card. The cache is the only term that grows.${maxContextAtSequences !== null ? ` That room holds ${formatExact(maxContextAtSequences)} tokens of context at ${formatExact(sequences)} ${sequences === 1 ? 'sequence' : 'sequences'}.` : ''}${maxSequencesAtContext !== null ? ` It also holds ${formatExact(maxSequencesAtContext)} sequences at ${formatExact(contextLength)} tokens.` : ''}`
+        ? `The recommendation leaves ${formatBytes(kvHeadroomBytes).text} free on one card. The cache and the activation buffer both grow with the context and the sequence count. The cache divides across the tensor-parallel ranks, and the buffer stays whole on every card.${maxContextAtSequences !== null ? ` That room holds ${formatExact(maxContextAtSequences)} tokens of context at ${formatExact(sequences)} ${sequences === 1 ? 'sequence' : 'sequences'}.` : ''}${maxSequencesAtContext !== null ? ` It also holds ${formatExact(maxSequencesAtContext)} sequences at ${formatExact(contextLength)} tokens.` : ''}`
         : 'There is no room to report, because no configuration fits.',
     },
   ]

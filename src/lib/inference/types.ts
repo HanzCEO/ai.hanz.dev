@@ -47,8 +47,9 @@ export interface InferenceInputs {
   /**
    * The dtype the KV cache is held in, for example FP8.
    *
-   * A cache is far smaller than the weights, but it is the term that grows with
-   * the context, so its dtype can decide which card fits. Absent means BF16.
+   * A cache is far smaller than the weights, but it grows with the context and
+   * the sequence count. Its dtype can therefore decide which card fits. Absent
+   * means BF16.
    */
   kvCacheDtype?: DtypeId
   /** The dtype a sparse indexer cache is held in. Absent means BF16. */
