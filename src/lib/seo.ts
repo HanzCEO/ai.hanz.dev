@@ -1,6 +1,7 @@
 import { REAP_FAQ } from './reap/faq'
 import { DSPARK_FAQ } from './dspark/faq'
 import { INFERENCE_FAQ } from './inference/faq'
+import { COMPRESSION_FAQ } from './compression/faq'
 import type { FaqItem } from './faq'
 
 /**
@@ -39,6 +40,7 @@ export const KV_CACHE_PATH = '/tools/kv-cache-calculator/'
 export const REAP_PATH = '/tools/cost-to-reap-calculator/'
 export const DSPARK_PATH = '/tools/dspark-training-cost-calculator/'
 export const INFERENCE_PATH = '/tools/inference-gpu-calculator/'
+export const CONTEXT_COMPRESSION_PATH = '/tools/context-compression-calculator/'
 
 const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
 const REAP_DESCRIPTION =
@@ -51,6 +53,10 @@ const DSPARK_DESCRIPTION =
 const INFERENCE_TITLE = 'Inference GPU Calculator | ai.hanz.dev'
 const INFERENCE_DESCRIPTION =
   'Inference GPU calculator for BF16, FP16, FP8, MXFP4, and NVFP4 weights. Size the KV cache first, then find the smallest GPU configuration that holds the model, with the decode rate it reaches.'
+
+const COMPRESSION_TITLE = 'Context Compression Calculator | ai.hanz.dev'
+const COMPRESSION_DESCRIPTION =
+  'Work out when summarising a session saves money, and read the share of the context where a summary stops beating a kept session.'
 
 export const ROUTE_META: RouteMeta[] = [
   {
@@ -104,6 +110,19 @@ export const ROUTE_META: RouteMeta[] = [
         description: INFERENCE_DESCRIPTION,
       }),
       faqJsonLd(INFERENCE_FAQ),
+    ),
+  },
+  {
+    path: CONTEXT_COMPRESSION_PATH,
+    title: COMPRESSION_TITLE,
+    description: COMPRESSION_DESCRIPTION,
+    jsonLd: jsonLdGraph(
+      softwareApplicationJsonLd({
+        path: CONTEXT_COMPRESSION_PATH,
+        title: COMPRESSION_TITLE,
+        description: COMPRESSION_DESCRIPTION,
+      }),
+      faqJsonLd(COMPRESSION_FAQ),
     ),
   },
 ]

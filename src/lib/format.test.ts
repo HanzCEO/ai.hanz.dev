@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatBytes, formatDuration } from './format'
+import { formatBytes, formatDuration, formatUsd } from './format'
 
 describe('formatDuration', () => {
   it('reports a sub second duration as less than a second', () => {
@@ -50,5 +50,24 @@ describe('formatBytes', () => {
     expect(formatBytes(0).text).toBe('0 B')
     expect(formatBytes(-1).text).toBe('0 B')
     expect(formatBytes(Number.NaN).text).toBe('0 B')
+  })
+})
+
+describe('formatUsd', () => {
+  it('scales the decimals with the magnitude', () => {
+    // A cached token price and a whole session cost differ by six orders of
+    // magnitude, so one decimal count cannot serve both.
+    expect(formatUsd(49.5)).toBe('$49.50')
+    expect(formatUsd(1)).toBe('$1.00')
+    expect(formatUsd(0.9226)).toBe('$0.923')
+    expect(formatUsd(0.0754)).toBe('$0.0754')
+    expect(formatUsd(0.0028)).toBe('$0.00280')
+  })
+
+  it('reports a zero or unusable amount as zero dollars', () => {
+    expect(formatUsd(0)).toBe('$0.00')
+    expect(formatUsd(-1)).toBe('$0.00')
+    expect(formatUsd(Number.NaN)).toBe('$0.00')
+    expect(formatUsd(Number.POSITIVE_INFINITY)).toBe('$0.00')
   })
 })

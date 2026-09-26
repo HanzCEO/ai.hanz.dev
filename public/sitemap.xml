@@ -20,4 +20,8 @@
     <loc>https://ai.hanz.dev/tools/inference-gpu-calculator/</loc>
     <changefreq>monthly</changefreq>
   </url>
+  <url>
+    <loc>https://ai.hanz.dev/tools/context-compression-calculator/</loc>
+    <changefreq>monthly</changefreq>
+  </url>
 </urlset>

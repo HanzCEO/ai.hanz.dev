@@ -1,4 +1,4 @@
-import { Calculator, Cpu, Scissors, Sparkles, type LucideIcon } from 'lucide-react'
+import { Calculator, Cpu, Scissors, Sparkles, TrendingDown, type LucideIcon } from 'lucide-react'
 
 export type ToolStatus = 'ready' | 'planned'
 
@@ -46,6 +46,14 @@ export const tools: Tool[] = [
     description:
       'Sizes the KV cache for a model and then finds the smallest GPU configuration that serves it in the weight format the checkpoint publishes, from the resident weights, the cache, an activation buffer, and a framework reserve.',
     icon: Cpu,
+    status: 'ready',
+  },
+  {
+    slug: 'context-compression-calculator',
+    name: 'Context Compression Calculator',
+    description:
+      'Shows the share of a session a summary has to beat before compressing it pays off.',
+    icon: TrendingDown,
     status: 'ready',
   },
 ]

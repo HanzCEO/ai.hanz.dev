@@ -42,6 +42,18 @@ export function formatBytes(bytes: number): FormattedBytes {
   }
 }
 
+/**
+ * Formats a dollar amount. The decimals follow the magnitude, because a cached
+ * token price and a whole session cost do not deserve the same precision.
+ */
+export function formatUsd(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '$0.00'
+  if (value >= 1) return `$${value.toFixed(2)}`
+  if (value >= 0.1) return `$${value.toFixed(3)}`
+  if (value >= 0.01) return `$${value.toFixed(4)}`
+  return `$${value.toFixed(5)}`
+}
+
 export function formatExact(bytes: number): string {
   if (!Number.isFinite(bytes)) return '0'
   return Math.round(bytes).toLocaleString('en-US')
