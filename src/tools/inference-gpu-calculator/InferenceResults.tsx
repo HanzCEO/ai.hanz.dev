@@ -353,9 +353,9 @@ export default function InferenceResults({
                     {result.maxContextAtSequences !== null &&
                     result.maxSequencesAtContext !== null ? (
                       <>
-                        The cache and the activation buffer both grow with the context and the
-                        sequence count. The cache divides across the tensor-parallel ranks, and the
-                        buffer stays whole on every card. That room holds{' '}
+                        The cache grows with the context and the sequence count, and it divides
+                        across the tensor-parallel ranks. The activation buffer grows with the
+                        sequence count alone, and it stays whole on every card. That room holds{' '}
                         {formatExact(result.maxContextAtSequences)} tokens of context at{' '}
                         {formatExact(result.sequences)}{' '}
                         {result.sequences === 1 ? 'sequence' : 'sequences'}. It also holds{' '}
@@ -363,7 +363,7 @@ export default function InferenceResults({
                         {formatExact(result.contextLength)} tokens each.
                       </>
                     ) : (
-                      'The cache and the activation buffer both grow with the context and the sequence count. There is no room left for more.'
+                      'The cache grows with the context and the sequence count. There is no room left for more.'
                     )}
                   </p>
                   <p className="text-sm text-amber-700 dark:text-amber-400">

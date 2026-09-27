@@ -138,15 +138,16 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
   const kvCacheBytes = kv.totalBytes
   const kvBytesPerToken = kv.bytesPerToken
 
-  // The activation buffer is sized on the widest live tensor of a decode step.
+  // The activation buffer is sized on the live tensors of a decode step. Each
+  // sequence in flight holds one token of intermediates, so the buffer follows
+  // the sequence count and the hidden width. It does not follow the context
+  // length. The stored context lives in the KV cache, which is counted on its
+  // own, and a decode step reads that cache rather than materialising it again.
   // It stays in full on every card, because each rank holds its own slice of
   // the batch rather than a slice of the buffer.
-  //
-  // The bytes one sequence adds for each token of context are also the growth
-  // term the room to grow section divides, so the two share one expression.
-  const activationBytesPerToken =
+  const activationBytesPerSequence =
     shape.hiddenSize * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR
-  const activationBytes = sequences * contextLength * activationBytesPerToken
+  const activationBytes = sequences * activationBytesPerSequence
   const runtimeReserveBytes = RUNTIME_OVERHEAD_BYTES
   const totalBytes = weightsBytes + kvCacheBytes + activationBytes + runtimeReserveBytes
 
@@ -245,20 +246,22 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
 
   // --- Room to grow -------------------------------------------------------
   //
-  // Two terms grow with the context and the sequence count. The KV cache
-  // divides across the tensor-parallel ranks, so one card carries a share of
-  // it. The activation buffer does not divide, so one card carries all of it.
-  // The free VRAM therefore converts into the largest context, or the largest
-  // sequence count, whose true per-card footprint still fits.
+  // The KV cache grows with the context and the sequence count, and it divides
+  // across the tensor-parallel ranks. The activation buffer grows with the
+  // sequence count alone, and it stays whole on every card. The free VRAM
+  // therefore converts into the largest context, or the largest sequence
+  // count, whose true per-card footprint still fits.
   const kvHeadroomBytes = recommended?.headroomBytes ?? 0
-  // The bytes one card adds for each extra token of context in one sequence.
-  const perCardGrowthPerToken = recommended
-    ? kvBytesPerToken / recommended.gpuCount + activationBytesPerToken
+  // One more token of context adds a share of the cache in each sequence in
+  // flight. The activation buffer does not move with the context.
+  const contextGrowth = recommended
+    ? (kvBytesPerToken * sequences) / recommended.gpuCount
     : 0
-  // One more context token costs that much in each sequence in flight, and one
-  // more sequence costs it in each token of the context.
-  const contextGrowth = sequences * perCardGrowthPerToken
-  const sequenceGrowth = contextLength * perCardGrowthPerToken
+  // One more sequence adds its share of the cache for the whole context, plus
+  // its own activation buffer, which stays whole on every card.
+  const sequenceGrowth = recommended
+    ? (kvBytesPerToken * contextLength) / recommended.gpuCount + activationBytesPerSequence
+    : 0
   const maxContextAtSequences =
     recommended && contextGrowth > 0
       ? contextLength + Math.floor(kvHeadroomBytes / contextGrowth)
@@ -291,7 +294,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     },
     {
       label: 'Activation buffer',
-      detail: `A decode step keeps ${ACTIVATION_FACTOR} live intermediates of ${formatExact(sequences * contextLength * shape.hiddenSize)} values at ${ACTIVATION_BYTES_PER_ELEMENT} bytes each. That is ${formatBytes(activationBytes).text}. This buffer stays in full on every card.`,
+      detail: `A decode step keeps ${ACTIVATION_FACTOR} live intermediates of ${formatExact(sequences * shape.hiddenSize)} values at ${ACTIVATION_BYTES_PER_ELEMENT} bytes each. That is ${formatBytes(activationBytes).text}. This buffer follows the sequence count and not the context length, and it stays in full on every card.`,
     },
     {
       label: 'Framework reserve',
@@ -323,7 +326,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     {
       label: 'Room to grow',
       detail: recommended
-        ? `The recommendation leaves ${formatBytes(kvHeadroomBytes).text} free on one card. The cache and the activation buffer both grow with the context and the sequence count. The cache divides across the tensor-parallel ranks, and the buffer stays whole on every card.${maxContextAtSequences !== null ? ` That room holds ${formatExact(maxContextAtSequences)} tokens of context at ${formatExact(sequences)} ${sequences === 1 ? 'sequence' : 'sequences'}.` : ''}${maxSequencesAtContext !== null ? ` It also holds ${formatExact(maxSequencesAtContext)} sequences at ${formatExact(contextLength)} tokens.` : ''}`
+        ? `The recommendation leaves ${formatBytes(kvHeadroomBytes).text} free on one card. The cache grows with the context and the sequence count, and it divides across the tensor-parallel ranks. The activation buffer grows with the sequence count alone, and it stays whole on every card.${maxContextAtSequences !== null ? ` That room holds ${formatExact(maxContextAtSequences)} tokens of context at ${formatExact(sequences)} ${sequences === 1 ? 'sequence' : 'sequences'}.` : ''}${maxSequencesAtContext !== null ? ` It also holds ${formatExact(maxSequencesAtContext)} sequences at ${formatExact(contextLength)} tokens.` : ''}`
         : 'There is no room to report, because no configuration fits.',
     },
   ]
@@ -411,7 +414,7 @@ export function estimateInference(shape: ModelShape, inputs: InferenceInputs): I
     'A 4 bit weight is never stored alone. It shares a scale with a block of neighbours, so MXFP4 costs 4.25 bits for each weight and NVFP4 costs 4.5 bits. The scale sidecar is counted in every byte figure here.',
     'The weight format is read from the checkpoint config. A checkpoint that names FP8, MXFP4, or NVFP4 is costed in that format, and a checkpoint that names none is costed as BF16.',
     'The weights and the KV cache divide across the tensor-parallel ranks. The activation buffer and the framework reserve stay in full on every card. A second card therefore does not halve the footprint.',
-    'The activation buffer is an estimate of the live intermediates in a decode step. It is not a measured value. Lower the sequence count if the real run runs out of VRAM.',
+    'The activation buffer is an estimate of the live intermediates in a decode step. It follows the sequence count and the hidden width, not the context length, because a decode step holds one token of intermediates for each sequence in flight. It is not a measured value. Lower the sequence count if the real run runs out of VRAM.',
     `Decode is bound by memory bandwidth, because each token reads every active weight once. The throughput figure is a bandwidth roofline at ${(BANDWIDTH_EFFICIENCY * 100).toFixed(0)} percent of the peak. It ignores prefill and kernel launch overhead.`,
     'Tensor parallelism across more than one node needs a fast interconnect. This estimate assumes the cards share the work at the bandwidth quoted. A PCIe link between nodes cannot do that.',
     'The parameter count comes from the config. Norms and biases are left out, because they are a fraction of a percent of the weights.',

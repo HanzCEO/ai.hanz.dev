@@ -97,12 +97,28 @@ describe('estimateInference memory', () => {
     expect(eight.kvBytesPerToken).toBe(one.kvBytesPerToken)
   })
 
-  it('sizes the activation buffer from the widest live tensor', () => {
+  it('sizes the activation buffer from the live tensors of a decode step', () => {
     const result = estimateInference(qwen3(), inputs(QWEN3_8B, { sequences: 2 }))
+    // One token of intermediates for each sequence in flight. The context
+    // length does not enter, because the stored context lives in the KV cache.
     expect(result.activationBytes).toBe(
-      2 * 8192 * 4096 * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR,
+      2 * 4096 * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR,
     )
     expect(result.runtimeReserveBytes).toBe(RUNTIME_OVERHEAD_BYTES)
+  })
+
+  it('does not grow the activation buffer with the context length', () => {
+    const short = estimateInference(qwen3(), inputs(QWEN3_8B, { contextLength: 8192 }))
+    const long = estimateInference(qwen3(), inputs(QWEN3_8B, { contextLength: 32768 }))
+    // Four times the context is four times the cache and the same buffer.
+    expect(long.kvCacheBytes).toBe(short.kvCacheBytes * 4)
+    expect(long.activationBytes).toBe(short.activationBytes)
+  })
+
+  it('grows the activation buffer with the sequence count', () => {
+    const one = estimateInference(qwen3(), inputs(QWEN3_8B, { sequences: 1 }))
+    const eight = estimateInference(qwen3(), inputs(QWEN3_8B, { sequences: 8 }))
+    expect(eight.activationBytes).toBe(one.activationBytes * 8)
   })
 
   it('sums the four memory terms into the total', () => {
@@ -184,6 +200,26 @@ describe('estimateInference memory', () => {
     expect(narrow.totalBytes).toBeLessThan(wide.totalBytes)
     expect(narrow.verdict).not.toBe('none')
   })
+
+  it('fits a long context on one card, because the buffer is not the context', () => {
+    // The activation buffer was once multiplied by the context length, which
+    // made it the largest term and reported that no card holds a model that
+    // fits with room to spare. A million token window on a 150 GiB checkpoint
+    // is the case that exposed it: the buffer is a few hundred KiB, not
+    // hundreds of GiB, so one B300 holds the run.
+    const config = loadConfigFixture('deepseek-v4-flash')
+    const result = estimateInference(
+      shapeOf(config),
+      inputs(config, { contextLength: 1_048_576, sequences: 8, maxGpus: 4 }),
+    )
+    expect(result.activationBytes).toBe(
+      8 * result.shape.hiddenSize * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR,
+    )
+    // The buffer is a rounding error against the weights and the cache.
+    expect(result.activationBytes).toBeLessThan(result.weightsBytes / 1000)
+    expect(result.verdict).toBe('single')
+    expect(result.recommended?.gpu.id).toBe('b300')
+  })
 })
 
 describe('estimateInference verdicts', () => {
@@ -257,7 +293,7 @@ describe('estimateInference ranking', () => {
       inputs(QWEN3_8B, { gpuFilter: ['rtx-5060'], headroom: 0.5 }),
     )
     expect(tight.recommended?.gpuCount).toBe(3)
-    expect(loose.recommended?.gpuCount).toBe(8)
+    expect(loose.recommended?.gpuCount).toBe(7)
   })
 
   it('divides the weights and the cache and keeps the buffer whole', () => {
@@ -329,13 +365,13 @@ describe('estimateInference room to grow', () => {
       inputs(QWEN3_8B, { gpuFilter: ['h100'], sequences: 4 }),
     )
     const cards = result.recommended?.gpuCount ?? 1
-    // The cache divides across the cards, and the activation buffer does not,
-    // so the growth term is not the cache alone.
+    // The cache divides across the cards and the activation buffer does not,
+    // so the marginal cost of a sequence is the cache share plus the buffer.
     const growth =
-      result.kvBytesPerToken / cards +
+      (result.kvBytesPerToken * result.contextLength) / cards +
       result.shape.hiddenSize * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR
     const added = (result.maxSequencesAtContext ?? 0) - 4
-    expect(added).toBe(Math.floor(result.kvHeadroomBytes / (8192 * growth)))
+    expect(added).toBe(Math.floor(result.kvHeadroomBytes / growth))
   })
 
   it('reports no room when nothing fits', () => {
@@ -348,14 +384,16 @@ describe('estimateInference room to grow', () => {
 
 /**
  * The room to grow figures have to be the largest values that still fit. Two
- * terms grow with the context and the sequence count. The KV cache divides
- * across the tensor-parallel ranks, and the activation buffer stays whole on
- * every card. The marginal cost is therefore the cache share plus the buffer,
- * and it is lower than the cache alone would suggest.
+ * terms grow with the context and the sequence count. The KV cache grows with
+ * both and divides across the tensor-parallel ranks. The activation buffer
+ * grows with the sequence count alone and stays whole on every card. The
+ * marginal cost of a token of context is therefore the cache share, and the
+ * marginal cost of a sequence is the cache share for the whole context plus the
+ * buffer.
  */
 describe('estimateInference room to grow is the largest value that fits', () => {
-  /** The activation bytes one sequence adds for each token of context. */
-  function activationBytesPerToken(result: InferenceResult): number {
+  /** The activation bytes one sequence adds, whatever the context. */
+  function activationBytesPerSequence(result: InferenceResult): number {
     return result.shape.hiddenSize * ACTIVATION_BYTES_PER_ELEMENT * ACTIVATION_FACTOR
   }
 
@@ -371,7 +409,7 @@ describe('estimateInference room to grow is the largest value that fits', () => 
     const cards = result.recommended?.gpuCount ?? 1
     return (
       (result.weightsBytes + result.kvBytesPerToken * contextLength * sequences) / cards +
-      sequences * contextLength * activationBytesPerToken(result) +
+      sequences * activationBytesPerSequence(result) +
       result.runtimeReserveBytes
     )
   }
@@ -387,13 +425,15 @@ describe('estimateInference room to grow is the largest value that fits', () => 
     expect(footprintAt(reported + 1)).toBeGreaterThan(usable)
   }
 
-  it('accounts for the card count and the activation buffer together', () => {
+  it('converts the free VRAM into context at the cache share alone', () => {
     const result = estimateInference(
       qwen3(),
       inputs(QWEN3_8B, { gpuFilter: ['rtx-5060'], headroom: 0.5 }),
     )
-    expect(result.recommended?.gpuCount).toBe(8)
-    expect(result.maxContextAtSequences).toBe(14805)
+    // The activation buffer does not grow with the context, so the context
+    // room is the cache share and nothing else.
+    expect(result.recommended?.gpuCount).toBe(7)
+    expect(result.maxContextAtSequences).toBe(16340)
     expect(result.maxSequencesAtContext).toBe(1)
   })
 
@@ -410,11 +450,11 @@ describe('estimateInference room to grow is the largest value that fits', () => 
     )
   })
 
-  it('is maximal on one card, where the old formula already overshot', () => {
+  it('is maximal on one card', () => {
     const result = estimateInference(qwen3(), inputs(QWEN3_8B, { gpuFilter: ['h100'] }))
     expect(result.recommended?.gpuCount).toBe(1)
-    expect(result.maxContextAtSequences).toBe(344807)
-    expect(result.maxSequencesAtContext).toBe(42)
+    expect(result.maxContextAtSequences).toBe(402275)
+    expect(result.maxSequencesAtContext).toBe(49)
     expectMaximal(result, result.maxContextAtSequences as number, (contextLength) =>
       perCardFootprint(result, contextLength, result.sequences),
     )
@@ -423,20 +463,22 @@ describe('estimateInference room to grow is the largest value that fits', () => 
     )
   })
 
-  it('reports less room than the card count alone would allow', () => {
+  it('reports no more sequence room than the cache share alone would allow', () => {
     const result = estimateInference(
       qwen3(),
-      inputs(QWEN3_8B, { gpuFilter: ['rtx-5060'], headroom: 0.5 }),
+      inputs(QWEN3_8B, { gpuFilter: ['rtx-5060'], headroom: 0.5, contextLength: 128 }),
     )
     const cards = result.recommended?.gpuCount ?? 1
     const headroomBytes = result.recommended?.headroomBytes ?? 0
     // The naive formula multiplies the per-card headroom by the card count and
-    // divides by the cache alone. It overshoots, because the activation buffer
-    // grows on every card and does not divide.
+    // divides by the cache share alone. It overshoots at a short context,
+    // because the activation buffer adds a term the cache does not carry.
     const naive =
-      result.contextLength +
-      Math.floor((headroomBytes * cards) / (result.kvBytesPerToken * result.sequences))
-    expect(result.maxContextAtSequences as number).toBeLessThan(naive)
+      result.sequences +
+      Math.floor(
+        (headroomBytes * cards) / (result.kvBytesPerToken * result.contextLength),
+      )
+    expect(result.maxSequencesAtContext as number).toBeLessThanOrEqual(naive)
   })
 })
 
