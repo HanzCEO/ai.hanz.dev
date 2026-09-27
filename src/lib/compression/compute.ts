@@ -13,8 +13,22 @@ import {
 } from './types'
 
 /** Dollars for a request of this many tokens, at a rate given for 1M tokens. */
-export function requestCost(ratePerMillion: number, tokens: number): number {
+export function keptCostAt(ratePerMillion: number, tokens: number): number {
   return (ratePerMillion * tokens) / 1_000_000
+}
+
+/**
+ * Dollars for the one request that carries the summary.
+ *
+ * The summary is capped at a share of the model window, so its size does not
+ * move with the session. The session argument is here so a caller can see that
+ * the answer does not depend on it.
+ */
+export function summaryCostAt(
+  result: Pick<CompressionResult, 'summaryUnitPerMillion' | 'summaryTokens'>,
+  _sessionTokens?: number,
+): number {
+  return keptCostAt(result.summaryUnitPerMillion, result.summaryTokens)
 }
 
 function requireFinite(
@@ -84,15 +98,14 @@ function validate(inputs: CompressionInputs): void {
 }
 
 /**
- * Costs the next request against a session two ways, and finds the compression
- * share at which the two agree.
+ * Finds the session size at which a summary starts to pay.
  *
- * The whole model is one line of algebra. A kept session of X tokens bills
- * X times a blended rate, where the blend is the miss price and the cache price
- * weighted by the mix, plus the output the reply writes. A summarised session
- * bills A percent of X at the full input price, because a summary is new text
- * that no cache holds. Both costs are linear in X with no constant term, so
- * they meet only at zero, and the winner is decided by the two slopes alone.
+ * The whole model is one line of algebra. A kept session of X tokens bills X
+ * times a blended rate, where the blend is the miss price and the cache price
+ * weighted by the mix, plus the output the reply writes. A summary is capped at
+ * A percent of the model window, so it bills a fixed number of tokens at the
+ * full input price, because no cache holds new text. The kept cost climbs with
+ * the session and the summary cost does not, so the two cross at one size.
  */
 export function estimateCompression(inputs: CompressionInputs): CompressionResult {
   validate(inputs)
@@ -111,27 +124,34 @@ export function estimateCompression(inputs: CompressionInputs): CompressionResul
 
   const outputPerInput = outputPercent / inputShare
 
-  // Dollars for 1M context tokens, with the context split across miss and cache.
+  // Dollars for 1M session tokens, with the context split across miss and cache.
   const missPart = (missPercent * inputs.inputPrice) / inputShare
   const cachePart = (cachePercent * inputs.cachedInputPrice) / inputShare
   const keptOutputPart = (outputPercent * inputs.outputPrice) / inputShare
-  const neverRatePerMillion = missPart + cachePart + keptOutputPart
+  const keptRatePerMillion = missPart + cachePart + keptOutputPart
 
-  const compressShare = inputs.compressionPercent / 100
-  const compressedInputPart = compressShare * inputs.inputPrice
-  const compressedOutputPart = compressShare * outputPerInput * inputs.outputPrice
-  const compressRatePerMillion = compressedInputPart + compressedOutputPart
+  // Dollars for 1M summary tokens. A summary is new text, so every token of it
+  // pays the full input price, and it writes a reply at the same ratio.
+  const summaryInputPart = inputs.inputPrice
+  const summaryOutputPart = outputPerInput * inputs.outputPrice
+  const summaryUnitPerMillion = summaryInputPart + summaryOutputPart
 
-  // The share where the summarised line crosses the kept line. The summarised
-  // line always pays the full input price, so this depends on the input price
-  // and never on the cached one alone.
-  const breakEvenPercent =
-    (100 * neverRatePerMillion) /
-    (inputs.inputPrice + outputPerInput * inputs.outputPrice)
+  const summaryTokens = (inputs.compressionPercent / 100) * CONTEXT_WINDOW_TOKENS
+  const summaryCost = keptCostAt(summaryUnitPerMillion, summaryTokens)
 
-  const neverAtWindow = requestCost(neverRatePerMillion, CONTEXT_WINDOW_TOKENS)
-  const compressAtWindow = requestCost(compressRatePerMillion, CONTEXT_WINDOW_TOKENS)
-  const savingAtWindow = neverAtWindow - compressAtWindow
+  // Where the climbing kept line meets the flat summary line. The summary costs
+  // the same at any session size, so the crossing is that fixed cost divided by
+  // the kept rate per token.
+  const breakEvenSessionTokens = (summaryCost * 1_000_000) / keptRatePerMillion
+
+  // The share at which the crossing point lands exactly on the full window, so
+  // a summary capped above it never pays off.
+  const breakEvenPercent = (100 * keptRatePerMillion) / summaryUnitPerMillion
+  const compressingWins = breakEvenSessionTokens < CONTEXT_WINDOW_TOKENS
+
+  const keptAtWindow = keptCostAt(keptRatePerMillion, CONTEXT_WINDOW_TOKENS)
+  const summaryAtWindow = summaryCostAt({ summaryUnitPerMillion, summaryTokens })
+  const savingAtWindow = keptAtWindow - summaryAtWindow
 
   const steps: CompressionStep[] = [
     {
@@ -139,20 +159,22 @@ export function estimateCompression(inputs: CompressionInputs): CompressionResul
       detail: `Your mix writes ${outputPercent} output tokens for every ${inputShare} input tokens, so the reply is ${outputPerInput.toFixed(4)} times the context.`,
     },
     {
-      label: 'Blended rate for a kept session',
-      detail: `${missPercent} percent of the context at $${inputs.inputPrice}, ${cachePercent} percent at $${inputs.cachedInputPrice}, and the reply at $${inputs.outputPrice} come to $${neverRatePerMillion.toFixed(4)} for 1M context tokens.`,
+      label: 'Rate for a kept session',
+      detail: `${missPercent} percent of the context at $${inputs.inputPrice}, ${cachePercent} percent at $${inputs.cachedInputPrice}, and the reply at $${inputs.outputPrice} come to $${keptRatePerMillion.toFixed(4)} for 1M session tokens.`,
     },
     {
-      label: 'Rate for a summarised session',
-      detail: `Keeping ${inputs.compressionPercent} percent of the context bills $${compressedInputPart.toFixed(4)} of input and $${compressedOutputPart.toFixed(4)} of output, which is $${compressRatePerMillion.toFixed(4)} for 1M context tokens.`,
+      label: 'Rate for summary tokens',
+      detail: `Every summary token is new text at the full input price, and the reply adds ${outputPerInput.toFixed(4)} times $${inputs.outputPrice}, which is $${summaryUnitPerMillion.toFixed(4)} for 1M summary tokens.`,
     },
     {
-      label: 'Break-even share',
-      detail: `The two rates agree when the summary keeps ${breakEvenPercent.toFixed(2)} percent of the context.`,
+      label: 'Size of the summary',
+      detail: `A ${inputs.compressionPercent} percent cap on a ${CONTEXT_WINDOW_TOKENS.toLocaleString('en-US')} token window is ${summaryTokens.toLocaleString('en-US')} tokens, whatever the length of the session.`,
     },
     {
-      label: 'Cost at the full window',
-      detail: `At 1M context tokens the kept session costs $${neverAtWindow.toFixed(4)} and the summarised one costs $${compressAtWindow.toFixed(4)}.`,
+      label: 'Session size where the two agree',
+      detail: compressingWins
+        ? `Carrying the summary costs $${summaryCost.toFixed(4)} at any size, so it pays once the session passes ${Math.round(breakEvenSessionTokens).toLocaleString('en-US')} tokens.`
+        : `Carrying the summary costs $${summaryCost.toFixed(4)} at any size, which only matches the kept session at ${Math.round(breakEvenSessionTokens).toLocaleString('en-US')} tokens, past the ${CONTEXT_WINDOW_TOKENS.toLocaleString('en-US')} token window.`,
     },
   ]
 
@@ -188,36 +210,45 @@ export function estimateCompression(inputs: CompressionInputs): CompressionResul
       source: 'Percent of the billed tokens the reply writes.',
     },
     {
-      key: 'context kept',
+      key: 'summary cap',
       value: inputs.compressionPercent,
-      source: 'Percent of the session a summary keeps.',
+      source: 'Percent of the model window the summary is capped at.',
     },
     {
       key: 'context window',
       value: CONTEXT_WINDOW_TOKENS,
       source: 'The largest context a current model serves.',
     },
+    {
+      key: 'summary size',
+      value: summaryTokens,
+      source: 'Tokens the summary is capped at, which is the same at any session length.',
+    },
   ]
 
   const assumptions = [
+    'The summary cap is a share of the model window, so the summary is the same size whatever the session length.',
     'The context is input tokens, and the reply is the only output the request bills.',
     'The reply scales with the context, so a shorter context writes a shorter reply.',
-    'A summary is new text, so every token it keeps is billed at the full input price.',
+    'A summary is new text, so every token of it is billed at the full input price.',
     'The context is already in the cache, so the kept path pays the cached price on its cache share.',
     'The call that writes the summary is not billed here, because it is a separate request.',
   ]
 
   return {
-    neverRatePerMillion,
-    compressRatePerMillion,
+    keptRatePerMillion,
+    summaryUnitPerMillion,
+    summaryTokens,
+    summaryCost,
+    breakEvenSessionTokens,
     breakEvenPercent,
-    compressingWins: compressRatePerMillion < neverRatePerMillion,
-    neverAtWindow,
-    compressAtWindow,
+    compressingWins,
+    keptAtWindow,
+    summaryAtWindow,
     savingAtWindow,
     outputPerInput,
-    neverParts: { miss: missPart, cache: cachePart, output: keptOutputPart },
-    compressParts: { input: compressedInputPart, output: compressedOutputPart },
+    keptParts: { miss: missPart, cache: cachePart, output: keptOutputPart },
+    summaryParts: { input: summaryInputPart, output: summaryOutputPart },
     normalized,
     compressionPercent: inputs.compressionPercent,
     contextWindowTokens: CONTEXT_WINDOW_TOKENS,

@@ -56,7 +56,7 @@ const INFERENCE_DESCRIPTION =
 
 const COMPRESSION_TITLE = 'Context Compression Calculator | ai.hanz.dev'
 const COMPRESSION_DESCRIPTION =
-  'Work out when summarising a session saves money, and read the share of the context where a summary stops beating a kept session.'
+  'Find the session size at which summarising it starts to pay off, and the widest summary cap that still beats carrying the session.'
 
 export const ROUTE_META: RouteMeta[] = [
   {

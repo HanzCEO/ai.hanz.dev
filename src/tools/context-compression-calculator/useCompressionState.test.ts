@@ -20,14 +20,14 @@ describe('COMPRESSION_SCHEMA', () => {
     expect(Object.keys(COMPRESSION_SCHEMA).sort()).toEqual([...expected].sort())
   })
 
-  it('opens on the Sonnet tier, the coding mix, and a 30 percent summary', () => {
+  it('opens on the Sonnet tier, the coding mix, and a 10 percent cap', () => {
     expect(DEFAULTS.inputPrice).toBe('3')
     expect(DEFAULTS.cachedInputPrice).toBe('0.3')
     expect(DEFAULTS.outputPrice).toBe('15')
     expect(DEFAULTS.missPercent).toBe('4.5')
     expect(DEFAULTS.cachePercent).toBe('95')
     expect(DEFAULTS.outputPercent).toBe('0.5')
-    expect(DEFAULTS.compressionPercent).toBe('30')
+    expect(DEFAULTS.compressionPercent).toBe('10')
   })
 
   it('writes nothing into the query string at the defaults', () => {

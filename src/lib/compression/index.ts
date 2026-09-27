@@ -1,4 +1,4 @@
-export { estimateCompression, requestCost } from './compute'
+export { estimateCompression, keptCostAt, summaryCostAt } from './compute'
 export { COMPRESSION_FAQ } from './faq'
 export {
   CONTEXT_WINDOW_TOKENS,

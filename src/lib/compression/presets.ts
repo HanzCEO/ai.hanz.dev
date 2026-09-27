@@ -8,13 +8,19 @@ import type { WorkloadMix } from './types'
  */
 export const CONTEXT_WINDOW_TOKENS = 1_000_000
 
-/** A summary keeps at least this share of the session. */
+/** A summary keeps at least this share of the window. */
 export const MIN_COMPRESSION_PERCENT = 1
 
 /** Keeping everything is the same as not summarising at all. */
 export const MAX_COMPRESSION_PERCENT = 100
 
-export const DEFAULT_COMPRESSION_PERCENT = 30
+/**
+ * The cap the page opens on.
+ *
+ * It has to be tight enough to pay off on the default coding mix, because a
+ * page that opens on a cap which never pays off has no answer to give.
+ */
+export const DEFAULT_COMPRESSION_PERCENT = 10
 
 export interface WorkloadPreset {
   id: string

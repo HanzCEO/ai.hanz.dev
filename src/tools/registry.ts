@@ -52,7 +52,7 @@ export const tools: Tool[] = [
     slug: 'context-compression-calculator',
     name: 'Context Compression Calculator',
     description:
-      'Shows the share of a session a summary has to beat before compressing it pays off.',
+      'Finds the session size at which summarising it starts to pay off, and the widest summary cap that still beats carrying the session.',
     icon: TrendingDown,
     status: 'ready',
   },

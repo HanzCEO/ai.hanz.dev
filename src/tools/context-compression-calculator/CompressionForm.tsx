@@ -226,8 +226,8 @@ export default function CompressionForm({
 
         <NumberField
           id="compression-percent"
-          label="Context kept"
-          hint="Percent of the session the summary keeps."
+          label="Summary cap"
+          hint="Percent of the 1M window the summary is capped at."
           decimal
           min={1}
           value={inputs.compressionPercent}
@@ -242,7 +242,7 @@ export default function CompressionForm({
           max={100}
           step={1}
           value={sliderValue}
-          aria-label="Context kept, in percent"
+          aria-label="Summary cap, in percent of the window"
           onChange={(event) => update({ compressionPercent: event.target.value })}
           className="accent-primary w-full"
         />

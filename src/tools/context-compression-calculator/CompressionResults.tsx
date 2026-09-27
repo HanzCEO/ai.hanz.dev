@@ -1,6 +1,6 @@
 import { AlertTriangle, Scissors } from 'lucide-react'
 
-import { formatUsd } from '@/lib/format'
+import { formatTokensShort, formatUsd } from '@/lib/format'
 import type { CompressionResult } from '@/lib/compression'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -14,16 +14,19 @@ interface CompressionResultsProps {
   computeError: string | null
 }
 
-/** One sentence naming the cheaper path and what the next request costs. */
-function verdictSentence(result: CompressionResult): string {
-  const kept = formatUsd(result.neverAtWindow)
-  const summarised = formatUsd(result.compressAtWindow)
-  const share = result.compressionPercent
+/**
+ * The answer, in one sentence: the session size at which a summary starts to
+ * pay. When no session size inside the window reaches that point, the sentence
+ * says so instead of naming a size the reader can never reach.
+ */
+function whenSentence(result: CompressionResult): string {
+  const threshold = `${formatTokensShort(result.breakEvenSessionTokens)} tokens`
+  const summaryCost = formatUsd(result.summaryCost)
 
   if (result.compressingWins) {
-    return `At a 1M context the next request costs ${summarised} with the session summarised to ${share} percent, against ${kept} for keeping it whole.`
+    return `Compress once the session passes ${threshold}, where carrying a ${result.compressionPercent} percent summary costs ${summaryCost}, the same as keeping the session.`
   }
-  return `At a 1M context the next request costs ${kept} with the session kept whole, against ${summarised} for a summary that keeps ${share} percent.`
+  return `Compressing does not pay at a ${result.compressionPercent} percent cap, because the summary costs ${summaryCost} against ${formatUsd(result.keptAtWindow)} for carrying a full window.`
 }
 
 export default function CompressionResults({ result, computeError }: CompressionResultsProps) {
@@ -41,8 +44,6 @@ export default function CompressionResults({ result, computeError }: Compression
 
   if (!result) return null
 
-  const cheaper = result.compressingWins ? 'summarising' : 'keeping the session'
-
   return (
     <div className="flex flex-col gap-6" aria-live="polite">
       <Card>
@@ -50,13 +51,15 @@ export default function CompressionResults({ result, computeError }: Compression
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-muted-foreground text-xs tracking-wide uppercase">
-                Break-even share
+                Compress once the session passes
               </p>
               <p
                 className="mt-1 text-4xl font-medium tracking-tight tabular-nums"
-                data-testid="compression-break-even"
+                data-testid="compression-threshold"
               >
-                {`${result.breakEvenPercent.toFixed(1)}%`}
+                {result.compressingWins
+                  ? `${formatTokensShort(result.breakEvenSessionTokens)} tokens`
+                  : 'never, at this cap'}
               </p>
             </div>
             <Badge
@@ -71,28 +74,34 @@ export default function CompressionResults({ result, computeError }: Compression
             </Badge>
           </div>
 
-          <p className="text-sm">{verdictSentence(result)}</p>
+          <p className="text-sm">{whenSentence(result)}</p>
 
           <p className="text-muted-foreground text-sm">
-            {`A summary pays when it keeps less than ${result.breakEvenPercent.toFixed(1)} percent, so at ${result.compressionPercent} percent ${cheaper} is cheaper.`}
+            {result.breakEvenPercent <= 100
+              ? `A summary may keep up to ${result.breakEvenPercent.toFixed(1)} percent of the window and still pay off.`
+              : 'Every summary cap up to a full window pays off here, because this session costs more per token than a summary does.'}
           </p>
 
           <dl className="border-border grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
             <div className="flex flex-col">
-              <dt className="text-muted-foreground text-xs">Kept session, full window</dt>
-              <dd className="tabular-nums">{formatUsd(result.neverAtWindow)}</dd>
+              <dt className="text-muted-foreground text-xs">Keep the session, full window</dt>
+              <dd className="tabular-nums">{formatUsd(result.keptAtWindow)}</dd>
             </div>
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">
-                {`Summary at ${result.compressionPercent}%, full window`}
+                {`Carry a ${result.compressionPercent}% summary`}
               </dt>
-              <dd className="tabular-nums">{formatUsd(result.compressAtWindow)}</dd>
+              <dd className="tabular-nums">{formatUsd(result.summaryAtWindow)}</dd>
             </div>
             <div className="flex flex-col">
               <dt className="text-muted-foreground text-xs">Difference</dt>
               <dd className="tabular-nums">{formatUsd(Math.abs(result.savingAtWindow))}</dd>
             </div>
           </dl>
+
+          <p className="text-muted-foreground text-xs">
+            {`The summary costs the same at every session size, because it is capped at ${formatTokensShort(result.summaryTokens)} tokens.`}
+          </p>
         </CardContent>
       </Card>
 
@@ -115,16 +124,16 @@ export default function CompressionResults({ result, computeError }: Compression
           <CardContent className="flex flex-col gap-4">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
               <div className="flex flex-col">
-                <dt className="text-muted-foreground text-xs">Kept rate, 1M context</dt>
-                <dd className="tabular-nums">{formatUsd(result.neverRatePerMillion)}</dd>
+                <dt className="text-muted-foreground text-xs">Kept rate, 1M session tokens</dt>
+                <dd className="tabular-nums">{formatUsd(result.keptRatePerMillion)}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-muted-foreground text-xs">Summary rate, 1M context</dt>
-                <dd className="tabular-nums">{formatUsd(result.compressRatePerMillion)}</dd>
+                <dt className="text-muted-foreground text-xs">Summary rate, 1M summary tokens</dt>
+                <dd className="tabular-nums">{formatUsd(result.summaryUnitPerMillion)}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-muted-foreground text-xs">Output tokens per input token</dt>
-                <dd className="tabular-nums">{result.outputPerInput.toFixed(4)}</dd>
+                <dt className="text-muted-foreground text-xs">Summary size</dt>
+                <dd className="tabular-nums">{`${formatTokensShort(result.summaryTokens)} tokens`}</dd>
               </div>
             </dl>
 

@@ -62,7 +62,7 @@ export default function ContextCompressionCalculator() {
 
       <ToolHeader
         title="Context Compression Calculator"
-        description="Find the point where summarising a session costs more than carrying it."
+        description="Find the session size at which summarising it starts to pay off."
       />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">

@@ -1,11 +1,16 @@
 /**
  * The shape of the context compression cost model.
  *
- * The question the page answers is narrow. A session has a context, and the
- * next request bills that context one of two ways: keep it and pay the cache
- * rate on most of it, or summarise it down to a share A and pay the full input
- * rate on what is left. Both are linear in the context size, so the whole
- * decision reduces to one number, the share A at which the two are equal.
+ * The question the page answers is when a summary starts to pay. A session has
+ * a context, and the next request bills that context one of two ways. Keep it
+ * and pay the cached rate on most of it, which grows with the session.
+ * Summarise it down to a share A of the model window and pay the full input
+ * rate on a fixed number of tokens, which does not grow at all.
+ *
+ * The kept cost is a line through the origin and the summary cost is a flat
+ * line, so the two cross at exactly one session size. That crossing point is
+ * the answer, and the share at which the summary stops paying is the second
+ * number the page reports.
  */
 
 /** How a session spends its billed tokens, as percentages that add to 100. */
@@ -26,7 +31,7 @@ export interface CompressionInputs {
   /** Dollars for 1M output tokens. */
   outputPrice: number
   mix: WorkloadMix
-  /** Share of the context the summary keeps, as a percentage. */
+  /** Share of the model context window the summary is capped at, as a percentage. */
   compressionPercent: number
 }
 
@@ -54,29 +59,36 @@ export interface CompressionConstant {
 }
 
 export interface CompressionResult {
-  /** Dollars for 1M context tokens when the whole session is kept. */
-  neverRatePerMillion: number
-  /** Dollars for 1M context tokens when the session is summarised first. */
-  compressRatePerMillion: number
-  /** The share the summary must stay above to pay off. */
+  /** Dollars for 1M session tokens when the whole session is kept. */
+  keptRatePerMillion: number
+  /** Dollars for 1M summary tokens, which no cache holds. */
+  summaryUnitPerMillion: number
+  /** Tokens the summary is capped at, which does not move with the session. */
+  summaryTokens: number
+  /** Cost of one request that carries the summary, the same at any session size. */
+  summaryCost: number
+
+  /** The session size at which the two paths cost the same, in tokens. */
+  breakEvenSessionTokens: number
+  /** The share of the window a summary may be capped at and still pay off. */
   breakEvenPercent: number
-  /** True when the chosen share is below the break-even share. */
+  /** True when the crossing point falls inside the window. */
   compressingWins: boolean
 
   /** Cost of one request at the full context window, kept whole. */
-  neverAtWindow: number
-  /** Cost of one request at the full context window, summarised first. */
-  compressAtWindow: number
-  /** neverAtWindow minus compressAtWindow. Positive means the summary pays. */
+  keptAtWindow: number
+  /** Cost of one request carrying the summary, which is flat. */
+  summaryAtWindow: number
+  /** keptAtWindow minus summaryAtWindow. Positive means the summary pays. */
   savingAtWindow: number
 
   /** Output tokens for each input token, which is o divided by (m + c). */
   outputPerInput: number
 
-  /** Where each dollar of the kept-context rate goes. */
-  neverParts: { miss: number; cache: number; output: number }
-  /** Where each dollar of the summarised rate goes. */
-  compressParts: { input: number; output: number }
+  /** Where each dollar of the kept rate goes. */
+  keptParts: { miss: number; cache: number; output: number }
+  /** Where each dollar of the summary unit rate goes. */
+  summaryParts: { input: number; output: number }
 
   /** The shares the model used, after they were normalized to sum to 100. */
   normalized: WorkloadMix

@@ -67,6 +67,21 @@ export function formatTokens(tokens: number): string {
 }
 
 /**
+ * Formats a token count in the short form a headline needs, for example 309k or
+ * 1.2M. It is for a number read at a glance, so the exact count belongs beside
+ * it rather than inside it.
+ */
+export function formatTokensShort(tokens: number): string {
+  if (!Number.isFinite(tokens) || tokens <= 0) return '0'
+  if (tokens >= 1_000_000) {
+    const millions = tokens / 1_000_000
+    return millions >= 10 ? `${Math.round(millions)}M` : `${millions.toFixed(1)}M`
+  }
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`
+  return String(Math.round(tokens))
+}
+
+/**
  * Reads a duration the way a person would say it. An estimate spans seconds to
  * days, so the unit has to follow the magnitude.
  */
