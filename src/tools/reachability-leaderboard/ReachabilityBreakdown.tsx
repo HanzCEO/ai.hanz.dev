@@ -8,9 +8,10 @@ import { weightFormatLabel } from '@/lib/weight-format'
 /**
  * The configurations that fit, one line per card count.
  *
- * Every configuration with more cards than the recommendation also fits, so the
- * full list is a long tail of strictly worse options. The smallest card at each
- * card count carries the answer.
+ * Every configuration with more cards than the recommendation also fits, so a
+ * line for each of those would only repeat the answer with more cards. One line
+ * for each card count, holding the smallest card at that count, is the whole
+ * list a reader needs.
  */
 function frontier(candidates: InferenceCandidate[]): InferenceCandidate[] {
   const smallestPerCount = new Map<number, InferenceCandidate>()
@@ -39,8 +40,8 @@ function configurationLine(candidate: InferenceCandidate): string {
  * rest of the directory.
  *
  * A field the leaderboard does not carry is left out rather than printed as
- * "Not named", because most of the board does not carry it and a column of the
- * same word is noise.
+ * "Not named", because most rows do not carry it and the same word repeated
+ * down the panel is not useful.
  */
 export default function ReachabilityBreakdown({ row }: { row: ReachabilityRow }) {
   const model = row.model
@@ -90,10 +91,10 @@ export default function ReachabilityBreakdown({ row }: { row: ReachabilityRow })
           <div className="flex flex-wrap gap-2">
             <Badge variant={row.verdict === 'none' ? 'destructive' : 'secondary'}>
               {row.verdict === 'single'
-                ? 'One card holds it'
+                ? 'Fits on one card'
                 : row.verdict === 'multi'
-                  ? `${row.gpuCount} cards hold it`
-                  : 'No card within the limit holds it'}
+                  ? `Fits on ${row.gpuCount} cards`
+                  : 'No card fits within the limit'}
             </Badge>
           </div>
 

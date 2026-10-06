@@ -45,7 +45,7 @@ describe('ZeroShotClassificationReachability at the first paint', () => {
 
   it('renders the board as a table', () => {
     expect(html).toContain('<table')
-    expect(html).toContain('The board')
+    expect(html).toContain('Results')
   })
 
   it('renders one row for every model on the board', () => {
@@ -64,8 +64,8 @@ describe('ZeroShotClassificationReachability at the first paint', () => {
 
   it('names the Decision Index in full, so it is not read as the rank', () => {
     expect(html).toContain('Decision Index')
-    expect(html).toContain('Runs on')
-    expect(html).toContain('Holds it alone')
+    expect(html).toContain('Hardware needed')
+    expect(html).toContain('Single card')
     expect(html).toContain('Tokens/s')
     expect(html).toContain('Weights')
   })

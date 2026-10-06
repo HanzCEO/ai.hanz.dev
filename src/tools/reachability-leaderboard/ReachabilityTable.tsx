@@ -23,8 +23,8 @@ interface ReachabilityTableProps {
  * The card tier a row runs on, in the one line the column has room for.
  *
  * The tier is named rather than a specific card, because several cards in the
- * directory share a memory size and the engine only ever chose one of them by
- * insertion order. Naming a single card would claim it is the smallest one that
+ * directory share a memory size and the engine chose one of them by insertion
+ * order. Naming a single card would state that it is the smallest one that
  * fits, which is false for every other card at the same size. The breakdown
  * names the concrete card the ranking recommended.
  */
@@ -34,7 +34,7 @@ function reachabilityLabel(row: ReachabilityRow): string {
   if (row.verdict === 'single') {
     return row.smallestSingleGpu
       ? `${row.smallestSingleGpu.vramGiB} GB or larger`
-      : 'One card holds it'
+      : 'Fits on one card'
   }
   return row.recommendedGpu
     ? `${row.gpuCount} cards, ${row.recommendedGpu.vramGiB} GB or larger`
@@ -44,9 +44,9 @@ function reachabilityLabel(row: ReachabilityRow): string {
 /**
  * The badge tone for a verdict.
  *
- * A model the site could not size is not a hardware answer, so it is drawn
- * quietly rather than in the alarm colour. Only a model that was costed and
- * found to need more cards than the limit is a negative result about hardware.
+ * A model this site could not size is not a hardware result, so it uses the
+ * outline tone. Only a model that was costed and needs more cards than the
+ * limit is a negative result about hardware.
  */
 function verdictVariant(row: ReachabilityRow): 'secondary' | 'outline' | 'destructive' {
   if (row.verdict === 'unreachable') return 'outline'
@@ -70,9 +70,9 @@ function decodeCell(row: ReachabilityRow): string {
  * The leaderboard itself.
  *
  * One row per model, in the order the reader chose. A row opens onto its own
- * working, so the table stays readable while the detail stays one click away.
- * The first paint renders the whole board from the baked dataset, with no
- * network call, which is what lets a crawler read the table.
+ * working, so the table stays readable and the detail stays collapsed. The first
+ * paint renders the whole table from the baked dataset, with no network call,
+ * which is what lets a crawler read it.
  */
 export default function ReachabilityTable({
   rows,
@@ -95,7 +95,7 @@ export default function ReachabilityTable({
   if (!valid) {
     return (
       <p className="text-muted-foreground text-sm">
-        Enter a context length, a sequence count, and a card limit to rank the board.
+        Enter a context length, a sequence count, and a card limit to rank the models.
       </p>
     )
   }
@@ -103,7 +103,7 @@ export default function ReachabilityTable({
   if (noGpuMatches) {
     return (
       <p className="text-muted-foreground text-sm">
-        No card in the directory matches that class and vendor. Widen the filter to see the board.
+        No card in the directory matches that class and vendor. Widen the filter to see the table.
       </p>
     )
   }
@@ -111,7 +111,7 @@ export default function ReachabilityTable({
   if (rows.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        No model matches that search. {totalRows} models are on the board.
+        No model matches that search. {totalRows} models are listed.
       </p>
     )
   }
@@ -128,11 +128,11 @@ export default function ReachabilityTable({
             : `${sizedCount} of ${rows.length} models sized for this workload. The rest are listed with the reason.`}
       </p>
 
-      {/* The height cap is for a phone, where the board would otherwise push the
-          workload controls several screens down the page. Paint containment is
-          what stops the wide table inside from making the page itself scroll
-          sideways: the scroll container clips it, but without containment the
-          browser still reports the table as page overflow. */}
+      {/* The height cap is for a phone, where the table would otherwise push the
+          workload controls down the page. Paint containment is what stops the
+          wide table inside from making the page itself scroll sideways: the
+          scroll container clips it, but without containment the browser still
+          reports the table as page overflow. */}
       <div className="max-h-[70vh] overflow-auto contain-paint lg:max-h-none">
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">
@@ -150,10 +150,10 @@ export default function ReachabilityTable({
                 Decision Index
               </th>
               <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
-                Runs on
+                Hardware needed
               </th>
               <th scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
-                Holds it alone
+                Single card
               </th>
               <th scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
                 Tokens/s

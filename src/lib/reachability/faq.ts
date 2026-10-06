@@ -14,12 +14,12 @@ export const REACHABILITY_FAQ: FaqItem[] = [
   {
     question: 'Where do the models and the scores come from?',
     answer:
-      'The model list, the Decision Index, and the measured latency come from the clef-evals Decision Model Leaderboard. The board is scored on one RTX PRO 6000, so its latency figure is not the decode rate shown here.',
+      'The model list, the Decision Index, and the measured latency come from the clef-evals Decision Model Leaderboard. The leaderboard is scored on one RTX PRO 6000, so its latency figure is not the decode rate shown here.',
   },
   {
     question: 'Why is the decode rate different from the measured latency?',
     answer:
-      'The latency on the board is one end to end call, which includes prefill, the decision head, and the client round trip. The rate here is a bandwidth roofline for decode alone, which is the best a card can do once the prompt is read.',
+      'The latency on the leaderboard is one end to end call, which includes prefill, the decision head, and the client round trip. The rate here is a bandwidth roofline for decode alone, which is the highest rate the card can reach once the prompt is read.',
   },
   {
     question: 'Why can a model not be sized at all?',
@@ -34,12 +34,12 @@ export const REACHABILITY_FAQ: FaqItem[] = [
   {
     question: 'Why does forcing a weight format change which cards fit?',
     answer:
-      'The bytes for each weight follow the format. A checkpoint published in BF16 costs two bytes for each weight, while an FP8 or a four bit copy costs one byte or half a byte. Forcing a narrower format prices the same parameter count in fewer bytes, so smaller cards enter the fitting set.',
+      'The bytes for each weight follow the format. A checkpoint published in BF16 costs two bytes for each weight, while an FP8 or a four bit copy costs one byte or half a byte. Forcing a narrower format stores the same parameter count in fewer bytes, so smaller cards fit.',
   },
   {
     question: 'Why does the context length change the answer?',
     answer:
-      'The KV cache grows with the context length and the sequence count, and it has to be resident beside the weights. A model that fits on a small card at a short context can need a larger card at a long one. The activation buffer follows the sequence count instead, because it holds one token of intermediates for each sequence in flight.',
+      'The KV cache grows with the context length and the sequence count, and it has to be resident beside the weights. A model that fits on a small card at a short context can need a larger card at a long one. The activation buffer follows the sequence count instead, because it holds one token of intermediates for each sequence at once.',
   },
   {
     question: 'What does the card count mean when one card is not enough?',

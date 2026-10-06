@@ -26,10 +26,10 @@ export default function ZeroShotClassificationReachability() {
 
       <ToolHeader
         title="Zero-Shot Classification Reachability Leaderboard"
-        description={`Every model on the clef-evals Decision Model Leaderboard, ranked by the smallest card in the ${GPU_PRESETS.length} card hardware directory on this site that can hold it. The board is re-costed as you set the workload: the weights in the format each checkpoint publishes, the KV cache at your context length and sequence count, an activation buffer, and a framework reserve. Models this site cannot size stay on the board with the reason.`}
+        description={`Every model on the clef-evals Decision Model Leaderboard, ranked by the smallest card in the ${GPU_PRESETS.length} card hardware directory on this site that can hold it. The ranking is recalculated as you set the workload: the weights in the format each checkpoint publishes, the KV cache at your context length and sequence count, an activation buffer, and a framework reserve. Models this site cannot size stay in the table with the reason.`}
       />
 
-      {/* The board comes first on a phone, so the answer is not below a column of
+      {/* The table comes first on a phone, so the result is not below a column of
           controls. The order is a view detail, so it is set on the container. */}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
         <div className="order-2 min-w-0 lg:order-1">
@@ -37,17 +37,17 @@ export default function ZeroShotClassificationReachability() {
         </div>
 
         <section
-          aria-labelledby="reachability-board-heading"
+          aria-labelledby="reachability-results-heading"
           className="order-1 flex min-w-0 flex-col gap-4 lg:order-2"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
-              <h2 id="reachability-board-heading" className="text-lg font-medium tracking-tight">
-                The board
+              <h2 id="reachability-results-heading" className="text-lg font-medium tracking-tight">
+                Results
               </h2>
               <p className="text-muted-foreground text-xs">
-                Ranked by the hardware a model needs, so rank 1 is the cheapest to host and not the
-                strongest.
+                Ordered by the hardware a model needs, so rank 1 needs the smallest card and not the
+                highest Decision Index.
               </p>
             </div>
             <ReachabilitySortPicker value={inputs.sort} onChange={(sort) => update({ sort })} />
@@ -87,8 +87,8 @@ export default function ZeroShotClassificationReachability() {
           {dateOnly(REACHABILITY_SOURCE.upstreamGeneratedUtc)} on{' '}
           {REACHABILITY_SOURCE.upstreamHardware}. The checkpoint configs come from each model base
           checkpoint on HuggingFace, and the hardware figures come from the same {GPU_PRESETS.length}{' '}
-          card directory the other calculators here use. This page was last baked on{' '}
-          {dateOnly(REACHABILITY_SOURCE.generatedUtc)}, over {REACHABILITY_MODELS.length} models.
+          card directory the other calculators here use. This page was last built on{' '}
+          {dateOnly(REACHABILITY_SOURCE.generatedUtc)}, from {REACHABILITY_MODELS.length} models.
         </p>
       </section>
 

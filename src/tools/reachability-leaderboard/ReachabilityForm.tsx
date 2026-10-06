@@ -34,11 +34,11 @@ const VENDOR_OPTIONS = [
 ]
 
 /**
- * The two workloads worth one click.
+ * The two preset workloads.
  *
- * A routing call fits on a small card, while a long context is where the card
- * count and the tier both climb. Without them the board only ever shows the
- * default workload, where every model fits on one card.
+ * A routing call fits on a small card. A long context needs more cards and a
+ * larger tier. Without them the page only shows the default workload, where
+ * every model fits on one card.
  */
 const WORKLOAD_PRESETS = [
   { label: 'Classification call', contextLength: '4096', sequences: '1' },
@@ -55,10 +55,9 @@ interface ReachabilityFormProps {
  * The workload and the hardware filter.
  *
  * Every control here changes which models can be reached or how the rows are
- * ordered. The table itself does no work, so a reader can see the whole board
- * move as the context length or the card filter changes. The order is a
- * property of the view rather than of the workload, so it lives beside the
- * table instead of here.
+ * ordered. The table itself does no work, so the rows change as the context
+ * length or the card filter changes. The order is a property of the view rather
+ * than of the workload, so it lives beside the table instead of here.
  */
 export default function ReachabilityForm({ inputs, update, errors }: ReachabilityFormProps) {
   const selectedClass = CLASS_OPTIONS.find((option) => option.id === inputs.gpuClass)

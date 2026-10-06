@@ -13,11 +13,12 @@ interface ReachabilitySortPickerProps {
 }
 
 /**
- * The order the board is read in.
+ * The order the table is read in.
  *
  * It sits beside the table rather than in the workload form, because it changes
- * the view and not the answer, and the reader who lands on rank 1 with a low
- * Decision Index can see from there that the board is ranked by hardware.
+ * the view and not the answer. It also makes the default order visible: a reader
+ * who sees rank 1 beside a low Decision Index can see that the table is ordered
+ * by hardware.
  */
 export default function ReachabilitySortPicker({
   value,

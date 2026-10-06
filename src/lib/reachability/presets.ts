@@ -80,8 +80,8 @@ export interface ReachabilityGpuGroup {
  * The three hardware classes, widest reach last.
  *
  * A card that is not named as datacenter or workstation is a consumer card.
- * That is the honest default for a new entry in the directory, because the
- * consumer list is the long tail.
+ * That is the default for a new entry in the directory, because the consumer
+ * list is the largest group.
  */
 export const REACHABILITY_GPU_GROUPS: ReachabilityGpuGroup[] = [
   {
@@ -146,12 +146,12 @@ export const REACHABILITY_SORTS: ReachabilitySort[] = [
   {
     id: 'reachability',
     label: 'Reachability',
-    hint: 'The smallest card that holds the model first, then the models nothing holds.',
+    hint: 'The smallest card that holds the model first, then the models no card holds.',
   },
   {
     id: 'index',
     label: 'Decision Index',
-    hint: 'The strongest model first, whatever hardware it needs.',
+    hint: 'The highest Decision Index first, at any hardware.',
   },
   {
     id: 'decode',

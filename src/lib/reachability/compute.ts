@@ -100,8 +100,8 @@ export interface ReachabilityRow {
   /** The format the checkpoint publishes, as the engine read it. */
   weightFormat: WeightFormatId | null
   /**
-   * Cards that hold the whole run on one card. This is the headline reach, and
-   * it is the set a reader who wants to host the model on a single card reads.
+   * Cards that hold the whole run on one card, which is the set a reader who
+   * wants to host the model on one card reads.
    */
   singleCardGpuIds: string[]
   singleCardGpuCount: number
@@ -110,7 +110,7 @@ export interface ReachabilityRow {
   /**
    * Parameter count the config arithmetic produced. It is reported beside the
    * published figure because the two can differ, and the reason is stated in
-   * the breakdown rather than hidden.
+   * the breakdown.
    */
   configParams: number | null
 }
@@ -274,7 +274,7 @@ const GROUP: Record<ReachabilityVerdict, number> = {
  * fewest cards first and then the smallest card. A model that needs more than
  * the card limit comes after that, and a model that could not be sized comes
  * last. Ties break on the decode rate and then on the Decision Index, so the
- * stronger and faster model is the one a reader sees first.
+ * faster model with the higher index is the one a reader sees first.
  */
 export function compareReachability(a: ReachabilityRow, b: ReachabilityRow): number {
   const group = GROUP[a.verdict] - GROUP[b.verdict]
@@ -308,7 +308,7 @@ export function compareReachability(a: ReachabilityRow, b: ReachabilityRow): num
  * order.
  *
  * The dataset and the config map can be overridden so a test can drive the
- * engine from a small fixture rather than the baked board.
+ * engine from a small fixture rather than the baked leaderboard.
  */
 export function rankReachability(
   inputs: ReachabilityInputs,

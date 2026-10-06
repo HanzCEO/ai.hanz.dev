@@ -35,9 +35,9 @@ import {
  * The weight format the table costs every checkpoint in.
  *
  * `published` follows the format each checkpoint was released in, which is the
- * honest default because it is what a reader would download. Every other value
- * forces that one format on the whole model, which answers the question of what
- * a quantised copy would reach.
+ * default because it is what a reader would download. Every other value forces
+ * that one format on the whole model, which answers the question of what a
+ * quantised copy would reach.
  */
 export type ReachabilityWeightChoice = 'published' | WeightFormatId
 

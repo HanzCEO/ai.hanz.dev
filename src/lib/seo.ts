@@ -63,7 +63,7 @@ const COMPRESSION_DESCRIPTION =
 
 const REACHABILITY_TITLE = 'Zero-Shot Classification Reachability Leaderboard | ai.hanz.dev'
 const REACHABILITY_DESCRIPTION =
-  'Rank the zero-shot classification models from the clef-evals Decision Model Leaderboard by the smallest GPU that serves each one, with the decode rate it reaches.'
+  'Rank the zero-shot classification models from the clef-evals Decision Model Leaderboard by the smallest GPU that holds each one, with the decode rate it reaches.'
 
 export const ROUTE_META: RouteMeta[] = [
   {

@@ -22,13 +22,13 @@ export interface ReachabilitySource {
   generatedUtc: string
   /** The leaderboard document the models and scores were read from. */
   leaderboardUrl: string
-  /** The label of the upstream board, for example Decision Index 0.2.1. */
+  /** The label of the upstream leaderboard, for example Decision Index 0.2.1. */
   upstreamLabel: string
-  /** When the upstream board itself was generated. */
+  /** When the upstream leaderboard itself was generated. */
   upstreamGeneratedUtc: string
-  /** The machine the upstream board was measured on. */
+  /** The machine the upstream leaderboard was measured on. */
   upstreamHardware: string
-  /** The upstream board URL. */
+  /** The upstream leaderboard URL. */
   upstreamUrl: string
   /** The number of benchmarks in the scored panel. */
   panelSize: number
