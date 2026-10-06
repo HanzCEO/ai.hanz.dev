@@ -14,12 +14,12 @@ export const REACHABILITY_FAQ: FaqItem[] = [
   {
     question: 'Where do the models and the scores come from?',
     answer:
-      'The model list, the Decision Index, and the measured latency come from the clef-evals Decision Model Leaderboard. This page adds the hardware question that board does not answer. The board is scored on one RTX PRO 6000, so its latency figure is not the decode rate shown here.',
+      'The model list, the Decision Index, and the measured latency come from the clef-evals Decision Model Leaderboard. The board is scored on one RTX PRO 6000, so its latency figure is not the decode rate shown here.',
   },
   {
     question: 'Why is the decode rate different from the measured latency?',
     answer:
-      'The latency on the board is one end to end call, which includes prefill, the decision head, and the client round trip. The rate here is a bandwidth roofline for decode alone, which is the best a card can do once the prompt is read. Treat the two as different measurements rather than as a disagreement.',
+      'The latency on the board is one end to end call, which includes prefill, the decision head, and the client round trip. The rate here is a bandwidth roofline for decode alone, which is the best a card can do once the prompt is read.',
   },
   {
     question: 'Why can a model not be sized at all?',
@@ -29,7 +29,7 @@ export const REACHABILITY_FAQ: FaqItem[] = [
   {
     question: 'How accurate is the weight footprint?',
     answer:
-      'It is config arithmetic rather than a measurement. The calculator counts the attention blocks, the dense feed forward, the expert bank, the router, and the embedding tables from the published config. It does not count a multimodal vision tower, a multi token prediction block, or the savings of layers that share weights, so a model with any of those can be a few percent off in either direction. The breakdown shows the parameter count the config produced beside the count the leaderboard reports, so the gap is visible rather than hidden.',
+      'It is config arithmetic rather than a measurement. The calculator counts the attention blocks, the dense feed forward, the expert bank, the router, and the embedding tables from the published config. It does not count a multimodal vision tower, a multi token prediction block, or the savings of layers that share weights, so a model with any of those can be a few percent off in either direction. The breakdown shows the parameter count the config produced beside the count the leaderboard reports.',
   },
   {
     question: 'Why does forcing a weight format change which cards fit?',

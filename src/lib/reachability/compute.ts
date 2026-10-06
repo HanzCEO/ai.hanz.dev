@@ -20,6 +20,7 @@
 import { GPU_PRESETS, type GpuSpec } from '../hardware'
 import {
   estimateInference,
+  InferenceInputError,
   type InferenceResult,
   type InferenceVerdict,
 } from '../inference'
@@ -59,6 +60,14 @@ export interface ReachabilityRow {
   sizeable: boolean
   /** Why the model could not be sized, or null when it was. */
   reason: string | null
+  /**
+   * The same reason in a few words, or null when the model was sized.
+   *
+   * The table shows this beside the model, so a reader can see why a row is
+   * missing a number without opening the row. The long `reason` stays in the
+   * breakdown, where there is room for the whole sentence.
+   */
+  reasonShort: string | null
   /** The shape read from the config, or null when nothing was sized. */
   shape: ModelShape | null
   /** The engine result, which the breakdown panel reads. Null when unsized. */
@@ -110,12 +119,14 @@ export interface ReachabilityRow {
 function unsizedRow(
   model: ReachabilityModelRecord,
   reason: string,
+  reasonShort: string,
   consideredGpuCount: number,
 ): ReachabilityRow {
   return {
     model,
     sizeable: false,
     reason,
+    reasonShort,
     shape: null,
     result: null,
     weightsBytes: 0,
@@ -165,7 +176,12 @@ export function evaluateModel(
     const reason = model.closed
       ? 'This model is served behind a closed hosted API, so there is no checkpoint to size.'
       : `The published config for ${model.baseModel ?? model.name} could not be read, so the model could not be sized.`
-    return unsizedRow(model, reason, consideredGpuCount)
+    return unsizedRow(
+      model,
+      reason,
+      model.closed ? 'Closed hosted API' : 'No published config',
+      consideredGpuCount,
+    )
   }
 
   const shape = detectModelShape(config)
@@ -173,6 +189,7 @@ export function evaluateModel(
     return unsizedRow(
       model,
       `The config for ${model.baseModel ?? model.name} declares the model type "${modelTypeOf(config)}", which is not a decoder transformer this site can size.`,
+      `Not a decoder transformer (${modelTypeOf(config)})`,
       consideredGpuCount,
     )
   }
@@ -192,7 +209,14 @@ export function evaluateModel(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'The engine cannot size this model.'
-    return unsizedRow(model, message, consideredGpuCount)
+    // The two failures a reader can act on differently: a workload the engine
+    // refuses, and a config whose cache shape it cannot read. Everything else
+    // is reported as the generic case rather than guessed at.
+    const reasonShort =
+      error instanceof InferenceInputError
+        ? 'Workload outside the engine range'
+        : 'No cache shape in the config'
+    return unsizedRow(model, message, reasonShort, consideredGpuCount)
   }
 
   // The recommended configuration and the alternatives are exactly the
@@ -212,6 +236,7 @@ export function evaluateModel(
     model,
     sizeable: true,
     reason: null,
+    reasonShort: null,
     shape,
     result,
     weightsBytes: result.weightsBytes,

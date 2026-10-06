@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { formatBytes, formatExact } from '@/lib/format'
@@ -18,26 +19,51 @@ interface ReachabilityTableProps {
   searching: boolean
 }
 
-/** The card a single card row runs on, or a shortfall, in one line. */
+/**
+ * The card tier a row runs on, in the one line the column has room for.
+ *
+ * The tier is named rather than a specific card, because several cards in the
+ * directory share a memory size and the engine only ever chose one of them by
+ * insertion order. Naming a single card would claim it is the smallest one that
+ * fits, which is false for every other card at the same size. The breakdown
+ * names the concrete card the ranking recommended.
+ */
 function reachabilityLabel(row: ReachabilityRow): string {
-  if (row.verdict === 'unreachable') return 'Could not be sized'
+  if (row.verdict === 'unreachable') return 'Not sized'
+  if (row.verdict === 'none') return 'Needs more cards than the limit'
   if (row.verdict === 'single') {
     return row.smallestSingleGpu
-      ? `${row.smallestSingleGpu.label} or larger`
+      ? `${row.smallestSingleGpu.vramGiB} GB or larger`
       : 'One card holds it'
   }
-  if (row.verdict === 'multi') {
-    return row.recommendedGpu
-      ? `${row.gpuCount} x ${row.recommendedGpu.label}`
-      : `${row.gpuCount} cards`
-  }
-  return 'Needs more cards than the limit'
+  return row.recommendedGpu
+    ? `${row.gpuCount} cards, ${row.recommendedGpu.vramGiB} GB or larger`
+    : `${row.gpuCount} cards`
 }
 
+/**
+ * The badge tone for a verdict.
+ *
+ * A model the site could not size is not a hardware answer, so it is drawn
+ * quietly rather than in the alarm colour. Only a model that was costed and
+ * found to need more cards than the limit is a negative result about hardware.
+ */
 function verdictVariant(row: ReachabilityRow): 'secondary' | 'outline' | 'destructive' {
-  if (row.verdict === 'unreachable' || row.verdict === 'none') return 'destructive'
+  if (row.verdict === 'unreachable') return 'outline'
+  if (row.verdict === 'none') return 'destructive'
   if (row.verdict === 'multi') return 'outline'
   return 'secondary'
+}
+
+/** The card count cell, which is a plain dash when nothing was costed. */
+function cardsCell(row: ReachabilityRow): string {
+  return row.sizeable ? `${row.singleCardGpuCount} of ${row.consideredGpuCount}` : '-'
+}
+
+/** The decode cell, which is a dash when no configuration fits. */
+function decodeCell(row: ReachabilityRow): string {
+  if (!row.sizeable) return '-'
+  return row.decodeTokensPerSecond > 0 ? formatExact(row.decodeTokensPerSecond) : '-'
 }
 
 /**
@@ -90,15 +116,24 @@ export default function ReachabilityTable({
     )
   }
 
+  const sizedCount = rows.filter((row) => row.sizeable).length
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-muted-foreground text-xs">
         {searching
           ? `${rows.length} of ${totalRows} models match.`
-          : `${rows.length} models ranked for this workload.`}
+          : sizedCount === rows.length
+            ? `${rows.length} models sized for this workload.`
+            : `${sizedCount} of ${rows.length} models sized for this workload. The rest are listed with the reason.`}
       </p>
 
-      <div className="overflow-x-auto">
+      {/* The height cap is for a phone, where the board would otherwise push the
+          workload controls several screens down the page. Paint containment is
+          what stops the wide table inside from making the page itself scroll
+          sideways: the scroll container clips it, but without containment the
+          browser still reports the table as page overflow. */}
+      <div className="max-h-[70vh] overflow-auto contain-paint lg:max-h-none">
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">
             Zero-shot classification models ranked by the smallest card that holds each one
@@ -111,20 +146,20 @@ export default function ReachabilityTable({
               <th scope="col" className="py-2 pr-3 font-medium">
                 Model
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-medium">
-                Index
+              <th scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
+                Decision Index
               </th>
-              <th scope="col" className="py-2 pr-3 font-medium">
+              <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
                 Runs on
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-medium">
-                Cards
+              <th scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
+                Holds it alone
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-medium">
+              <th scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
                 Tokens/s
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-medium">
-                Checkpoint
+              <th scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
+                Weights
               </th>
               <th scope="col" className="py-2 font-medium">
                 <span className="sr-only">Details</span>
@@ -148,35 +183,41 @@ export default function ReachabilityTable({
                           .filter(Boolean)
                           .join(' · ')}
                       </div>
+                      {row.reasonShort && (
+                        <div className="text-xs text-amber-600 dark:text-amber-500">
+                          {row.reasonShort}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-3 pr-3 text-right tabular-nums">
+                    <td className="text-muted-foreground py-3 pr-3 text-right tabular-nums whitespace-nowrap">
                       {row.model.index === null ? 'Not scored' : row.model.index.toFixed(2)}
                     </td>
                     <td className="py-3 pr-3">
                       <Badge variant={verdictVariant(row)}>{reachabilityLabel(row)}</Badge>
                     </td>
-                    <td className="text-muted-foreground py-3 pr-3 text-right tabular-nums">
-                      {row.singleCardGpuCount} / {row.consideredGpuCount}
+                    <td className="text-muted-foreground py-3 pr-3 text-right tabular-nums whitespace-nowrap">
+                      {cardsCell(row)}
                     </td>
-                    <td className="py-3 pr-3 text-right tabular-nums">
-                      {row.sizeable && row.decodeTokensPerSecond > 0
-                        ? formatExact(row.decodeTokensPerSecond)
-                        : 'Not reachable'}
-                    </td>
-                    <td className="text-muted-foreground py-3 pr-3 text-right tabular-nums">
-                      {row.sizeable ? formatBytes(row.weightsBytes).text : 'Not sized'}
+                    <td className="py-3 pr-3 text-right tabular-nums">{decodeCell(row)}</td>
+                    <td className="text-muted-foreground py-3 pr-3 text-right tabular-nums whitespace-nowrap">
+                      {row.sizeable ? formatBytes(row.weightsBytes).text : '-'}
                     </td>
                     <td className="py-3 text-right">
                       <button
                         type="button"
-                        className="text-primary underline-offset-4 hover:underline"
+                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 whitespace-nowrap"
                         aria-expanded={expanded}
                         aria-controls={
                           expanded ? `reachability-detail-${row.model.engine}` : undefined
                         }
                         onClick={() => toggle(row.model.engine)}
                       >
-                        {expanded ? 'Hide' : 'Details'}
+                        {expanded ? (
+                          <ChevronDown aria-hidden="true" className="size-4" />
+                        ) : (
+                          <ChevronRight aria-hidden="true" className="size-4" />
+                        )}
+                        <span className="text-xs">{expanded ? 'Hide' : 'Details'}</span>
                       </button>
                     </td>
                   </tr>
@@ -196,6 +237,11 @@ export default function ReachabilityTable({
           </tbody>
         </table>
       </div>
+
+      <p className="text-muted-foreground text-xs">
+        Tokens each second is the total across the concurrent sequences you set, for the
+        configuration the ranking recommended.
+      </p>
     </div>
   )
 }

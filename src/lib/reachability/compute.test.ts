@@ -127,8 +127,17 @@ describe('evaluateModel', () => {
     expect(row.sizeable).toBe(false)
     expect(row.verdict).toBe('unreachable')
     expect(row.reason).toBeTruthy()
+    // The table has room for a few words, so the reason is carried twice: the
+    // sentence for the breakdown and the label for the row.
+    expect(row.reasonShort).toBeTruthy()
     expect(row.result).toBeNull()
     expect(row.singleCardGpuCount).toBe(0)
+  })
+
+  it('labels a closed hosted API as closed rather than as a missing config', () => {
+    const row = evaluateModel({ ...record('closed', null), closed: true }, null, BASE)
+
+    expect(row.reasonShort).toBe('Closed hosted API')
   })
 
   it('marks a config that describes no transformer unreachable', () => {
@@ -138,6 +147,17 @@ describe('evaluateModel', () => {
     expect(row.sizeable).toBe(false)
     expect(row.verdict).toBe('unreachable')
     expect(row.reason).toContain('extractor')
+    // The label names the declared type, because "not a decoder transformer"
+    // alone does not tell a reader which architecture was found instead.
+    expect(row.reasonShort).toContain('extractor')
+  })
+
+  it('leaves the short reason empty on a row that was sized', () => {
+    const row = evaluateModel(record('small', 'small'), SMALL_MODEL, BASE)
+
+    expect(row.sizeable).toBe(true)
+    expect(row.reason).toBeNull()
+    expect(row.reasonShort).toBeNull()
   })
 
   it('reaches more cards when a narrower weight format is forced', () => {

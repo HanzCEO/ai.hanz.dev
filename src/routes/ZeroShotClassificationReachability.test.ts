@@ -62,10 +62,42 @@ describe('ZeroShotClassificationReachability at the first paint', () => {
     expect(html).toContain(first.name)
   })
 
-  it('names the Decision Index and the reachability of a row', () => {
-    expect(html).toContain('Index')
+  it('names the Decision Index in full, so it is not read as the rank', () => {
+    expect(html).toContain('Decision Index')
     expect(html).toContain('Runs on')
+    expect(html).toContain('Holds it alone')
     expect(html).toContain('Tokens/s')
+    expect(html).toContain('Weights')
+  })
+
+  it('says how many models were sized rather than how many were ranked', () => {
+    expect(html).toContain(`of ${REACHABILITY_MODELS.length} models sized for this workload`)
+  })
+
+  it('carries the short reason on a row it could not size', () => {
+    // The unsized rows are the ones with a label under the model name, so the
+    // first of them is the closed hosted API.
+    expect(html).toContain('Closed hosted API')
+    expect(html).toContain('Not sized')
+    // Those rows carry a dash in all three number cells rather than a measured
+    // zero. Counting cells rather than matching a substring is deliberate: a
+    // sized row can legitimately read "0 of 40" when no single card holds it.
+    const unsized = html.match(/Not sized/g) ?? []
+    const dashes = html.match(/>-<\/td>/g) ?? []
+    expect(unsized.length).toBeGreaterThan(0)
+    expect(dashes).toHaveLength(unsized.length * 3)
+  })
+
+  it('collapses the questions while keeping every answer in the document', () => {
+    expect(html).toContain('<details')
+    expect(html).not.toContain('<details open')
+    for (const item of REACHABILITY_FAQ) {
+      expect(html).toContain(item.answer)
+    }
+  })
+
+  it('explains what the decode column counts', () => {
+    expect(html).toContain('total across the concurrent sequences')
   })
 
   it('carries every workload control', () => {
@@ -96,7 +128,6 @@ describe('ZeroShotClassificationReachability at the first paint', () => {
       expect(html).toContain(item.question)
     }
   })
-
   it('cites where the numbers come from', () => {
     expect(html).toContain('Where the numbers come from')
     expect(html).toContain('clef-evals Decision Model Leaderboard')

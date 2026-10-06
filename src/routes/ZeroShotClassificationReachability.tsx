@@ -3,10 +3,11 @@ import { ToolBreadcrumb, ToolHeader } from '@/components/layout/ToolPage'
 import { GPU_PRESETS } from '@/lib/hardware'
 import {
   REACHABILITY_FAQ,
+  REACHABILITY_MODELS,
   REACHABILITY_SOURCE,
-  DEFAULT_REACHABILITY_HEADROOM,
 } from '@/lib/reachability'
 import ReachabilityForm from '@/tools/reachability-leaderboard/ReachabilityForm'
+import ReachabilitySortPicker from '@/tools/reachability-leaderboard/ReachabilitySortPicker'
 import ReachabilityTable from '@/tools/reachability-leaderboard/ReachabilityTable'
 import { useReachabilityState } from '@/tools/reachability-leaderboard/useReachabilityState'
 
@@ -25,16 +26,33 @@ export default function ZeroShotClassificationReachability() {
 
       <ToolHeader
         title="Zero-Shot Classification Reachability Leaderboard"
-        description={`Every model on the clef-evals Decision Model Leaderboard, ranked by the smallest card in the ${GPU_PRESETS.length} card hardware directory on this site that can hold it. Each model is costed at a workload you choose: the checkpoint weights in the format it publishes, the KV cache at your context length and sequence count, an activation buffer, and a framework reserve of ${DEFAULT_REACHABILITY_HEADROOM * 100} percent of the card. The table reports the smallest card that holds the run, how many cards hold it on their own, and the decode rate that configuration reaches. Models the site cannot size stay on the board with the reason, so the table never overstates how much of the board the hardware reaches.`}
+        description={`Every model on the clef-evals Decision Model Leaderboard, ranked by the smallest card in the ${GPU_PRESETS.length} card hardware directory on this site that can hold it. The board is re-costed as you set the workload: the weights in the format each checkpoint publishes, the KV cache at your context length and sequence count, an activation buffer, and a framework reserve. Models this site cannot size stay on the board with the reason.`}
       />
 
+      {/* The board comes first on a phone, so the answer is not below a column of
+          controls. The order is a view detail, so it is set on the container. */}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
-        <ReachabilityForm inputs={inputs} update={update} errors={errors} />
+        <div className="order-2 min-w-0 lg:order-1">
+          <ReachabilityForm inputs={inputs} update={update} errors={errors} />
+        </div>
 
-        <section aria-labelledby="reachability-board-heading" className="flex flex-col gap-4">
-          <h2 id="reachability-board-heading" className="text-lg font-medium tracking-tight">
-            The board
-          </h2>
+        <section
+          aria-labelledby="reachability-board-heading"
+          className="order-1 flex min-w-0 flex-col gap-4 lg:order-2"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <h2 id="reachability-board-heading" className="text-lg font-medium tracking-tight">
+                The board
+              </h2>
+              <p className="text-muted-foreground text-xs">
+                Ranked by the hardware a model needs, so rank 1 is the cheapest to host and not the
+                strongest.
+              </p>
+            </div>
+            <ReachabilitySortPicker value={inputs.sort} onChange={(sort) => update({ sort })} />
+          </div>
+
           <ReachabilityTable
             rows={rows}
             totalRows={totalRows}
@@ -49,7 +67,10 @@ export default function ZeroShotClassificationReachability() {
         aria-labelledby="reachability-source-heading"
         className="text-muted-foreground max-w-3xl text-sm"
       >
-        <h2 id="reachability-source-heading" className="text-foreground mb-2 text-lg font-medium tracking-tight">
+        <h2
+          id="reachability-source-heading"
+          className="text-foreground mb-2 text-lg font-medium tracking-tight"
+        >
           Where the numbers come from
         </h2>
         <p>
@@ -65,12 +86,9 @@ export default function ZeroShotClassificationReachability() {
           , which is {REACHABILITY_SOURCE.upstreamLabel} and was generated on{' '}
           {dateOnly(REACHABILITY_SOURCE.upstreamGeneratedUtc)} on{' '}
           {REACHABILITY_SOURCE.upstreamHardware}. The checkpoint configs come from each model base
-          checkpoint on HuggingFace. This page was last baked on{' '}
-          {dateOnly(REACHABILITY_SOURCE.generatedUtc)}.
-        </p>
-        <p className="mt-2">
-          The hardware figures come from the same GPU directory the other calculators on this site
-          use, which is {GPU_PRESETS.length} cards from 8 GB to 288 GB.
+          checkpoint on HuggingFace, and the hardware figures come from the same {GPU_PRESETS.length}{' '}
+          card directory the other calculators here use. This page was last baked on{' '}
+          {dateOnly(REACHABILITY_SOURCE.generatedUtc)}, over {REACHABILITY_MODELS.length} models.
         </p>
       </section>
 

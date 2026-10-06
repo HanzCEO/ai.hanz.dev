@@ -1,6 +1,7 @@
 import { DTYPES } from '@/lib/kvcache'
-import { REACHABILITY_GPU_GROUPS, REACHABILITY_SORTS } from '@/lib/reachability'
+import { REACHABILITY_GPU_GROUPS } from '@/lib/reachability'
 import NumberField from '@/components/ui/number-field'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -32,6 +33,18 @@ const VENDOR_OPTIONS = [
   { id: 'amd' as const, label: 'AMD' },
 ]
 
+/**
+ * The two workloads worth one click.
+ *
+ * A routing call fits on a small card, while a long context is where the card
+ * count and the tier both climb. Without them the board only ever shows the
+ * default workload, where every model fits on one card.
+ */
+const WORKLOAD_PRESETS = [
+  { label: 'Classification call', contextLength: '4096', sequences: '1' },
+  { label: 'Long context', contextLength: '131072', sequences: '1' },
+]
+
 interface ReachabilityFormProps {
   inputs: ReachabilityFormInputs
   update: (patch: Partial<ReachabilityFormInputs>) => void
@@ -43,11 +56,12 @@ interface ReachabilityFormProps {
  *
  * Every control here changes which models can be reached or how the rows are
  * ordered. The table itself does no work, so a reader can see the whole board
- * move as the context length or the card filter changes.
+ * move as the context length or the card filter changes. The order is a
+ * property of the view rather than of the workload, so it lives beside the
+ * table instead of here.
  */
 export default function ReachabilityForm({ inputs, update, errors }: ReachabilityFormProps) {
   const selectedClass = CLASS_OPTIONS.find((option) => option.id === inputs.gpuClass)
-  const selectedSort = REACHABILITY_SORTS.find((sort) => sort.id === inputs.sort)
   const selectedWeight =
     REACHABILITY_WEIGHT_OPTIONS.find((option) => option.id === inputs.weightFormat) ??
     REACHABILITY_WEIGHT_OPTIONS[0]
@@ -55,7 +69,7 @@ export default function ReachabilityForm({ inputs, update, errors }: Reachabilit
 
   return (
     <form
-      className="flex flex-col gap-6"
+      className="flex min-w-0 flex-col gap-6"
       aria-label="Reachability workload"
       onSubmit={(event) => event.preventDefault()}
     >
@@ -70,9 +84,6 @@ export default function ReachabilityForm({ inputs, update, errors }: Reachabilit
           value={inputs.search}
           onChange={(event) => update({ search: event.target.value })}
         />
-        <p className="text-xs text-muted-foreground">
-          Matches the model name, the engine name, the publisher, and the base checkpoint.
-        </p>
       </div>
 
       <fieldset className="flex flex-col gap-4">
@@ -131,13 +142,37 @@ export default function ReachabilityForm({ inputs, update, errors }: Reachabilit
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {selectedClass?.hint ?? CLASS_OPTIONS[0].hint} The card class and the vendor narrow which
-          cards the ranking may use, and the table reports the count that still holds each model.
+          {selectedClass?.hint ?? CLASS_OPTIONS[0].hint}
         </p>
       </fieldset>
 
       <fieldset className="flex flex-col gap-4">
         <legend className="text-sm font-medium">Workload</legend>
+
+        <div className="flex flex-wrap gap-2">
+          {WORKLOAD_PRESETS.map((preset) => {
+            const active =
+              inputs.contextLength === preset.contextLength &&
+              inputs.sequences === preset.sequences
+            return (
+              <Button
+                key={preset.label}
+                type="button"
+                size="sm"
+                variant={active ? 'secondary' : 'outline'}
+                aria-pressed={active}
+                onClick={() =>
+                  update({
+                    contextLength: preset.contextLength,
+                    sequences: preset.sequences,
+                  })
+                }
+              >
+                {preset.label}
+              </Button>
+            )
+          })}
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
@@ -237,33 +272,6 @@ export default function ReachabilityForm({ inputs, update, errors }: Reachabilit
           <p className="text-xs text-rose-600 dark:text-rose-400">{errors.maxGpus}</p>
         )}
       </fieldset>
-
-      <div className="flex flex-col gap-2">
-        <label htmlFor="reachability-sort" className="text-sm font-medium">
-          Order
-        </label>
-        <Select
-          value={inputs.sort}
-          onValueChange={(next) => {
-            const option = REACHABILITY_SORTS.find((sort) => sort.id === next)
-            if (option) update({ sort: option.id })
-          }}
-        >
-          <SelectTrigger id="reachability-sort" className="w-full">
-            <SelectValue>{selectedSort?.label ?? 'Reachability'}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {REACHABILITY_SORTS.map((sort) => (
-              <SelectItem key={sort.id} value={sort.id}>
-                {sort.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {selectedSort?.hint ?? REACHABILITY_SORTS[0].hint}
-        </p>
-      </div>
     </form>
   )
 }
