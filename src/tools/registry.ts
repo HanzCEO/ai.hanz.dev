@@ -1,4 +1,4 @@
-import { Calculator, Cpu, Scissors, Sparkles, TrendingDown, type LucideIcon } from 'lucide-react'
+import { Calculator, Cpu, Scissors, Sparkles, TrendingDown, Trophy, type LucideIcon } from 'lucide-react'
 
 export type ToolStatus = 'ready' | 'planned'
 
@@ -54,6 +54,14 @@ export const tools: Tool[] = [
     description:
       'Finds the session size at which summarising it starts to pay off, and the widest summary cap that still beats carrying the session.',
     icon: TrendingDown,
+    status: 'ready',
+  },
+  {
+    slug: 'zero-shot-classification-reachability-leaderboard',
+    name: 'Zero-Shot Classification Reachability Leaderboard',
+    description:
+      'Ranks every model on the clef-evals Decision Model Leaderboard by the smallest GPU in the hardware list on this site that holds it, at a workload you set.',
+    icon: Trophy,
     status: 'ready',
   },
 ]

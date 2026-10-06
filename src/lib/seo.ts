@@ -2,6 +2,7 @@ import { REAP_FAQ } from './reap/faq'
 import { DSPARK_FAQ } from './dspark/faq'
 import { INFERENCE_FAQ } from './inference/faq'
 import { COMPRESSION_FAQ } from './compression/faq'
+import { REACHABILITY_FAQ } from './reachability/faq'
 import type { FaqItem } from './faq'
 
 /**
@@ -41,6 +42,8 @@ export const REAP_PATH = '/tools/cost-to-reap-calculator/'
 export const DSPARK_PATH = '/tools/dspark-training-cost-calculator/'
 export const INFERENCE_PATH = '/tools/inference-gpu-calculator/'
 export const CONTEXT_COMPRESSION_PATH = '/tools/context-compression-calculator/'
+export const ZERO_SHOT_REACHABILITY_PATH =
+  '/tools/zero-shot-classification-reachability-leaderboard/'
 
 const REAP_TITLE = 'REAP Duration Calculator | ai.hanz.dev'
 const REAP_DESCRIPTION =
@@ -57,6 +60,10 @@ const INFERENCE_DESCRIPTION =
 const COMPRESSION_TITLE = 'Context Compression Calculator | ai.hanz.dev'
 const COMPRESSION_DESCRIPTION =
   'Find the session size at which summarising it starts to pay off, and the widest summary cap that still beats carrying the session.'
+
+const REACHABILITY_TITLE = 'Zero-Shot Classification Reachability Leaderboard | ai.hanz.dev'
+const REACHABILITY_DESCRIPTION =
+  'Rank the zero-shot classification models from the clef-evals Decision Model Leaderboard by the smallest GPU that serves each one, with the decode rate it reaches.'
 
 export const ROUTE_META: RouteMeta[] = [
   {
@@ -123,6 +130,19 @@ export const ROUTE_META: RouteMeta[] = [
         description: COMPRESSION_DESCRIPTION,
       }),
       faqJsonLd(COMPRESSION_FAQ),
+    ),
+  },
+  {
+    path: ZERO_SHOT_REACHABILITY_PATH,
+    title: REACHABILITY_TITLE,
+    description: REACHABILITY_DESCRIPTION,
+    jsonLd: jsonLdGraph(
+      softwareApplicationJsonLd({
+        path: ZERO_SHOT_REACHABILITY_PATH,
+        title: REACHABILITY_TITLE,
+        description: REACHABILITY_DESCRIPTION,
+      }),
+      faqJsonLd(REACHABILITY_FAQ),
     ),
   },
 ]

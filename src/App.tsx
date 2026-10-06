@@ -8,6 +8,7 @@ import {
   INFERENCE_PATH,
   KV_CACHE_PATH,
   REAP_PATH,
+  ZERO_SHOT_REACHABILITY_PATH,
 } from '@/lib/seo'
 import Home from '@/routes/Home'
 import ContextCompressionCalculator from '@/routes/ContextCompressionCalculator'
@@ -16,6 +17,7 @@ import InferenceGpuCalculator from '@/routes/InferenceGpuCalculator'
 import KvCacheCalculator from '@/routes/KvCacheCalculator'
 import NotFound from '@/routes/NotFound'
 import ReapCostCalculator from '@/routes/ReapCostCalculator'
+import ZeroShotClassificationReachability from '@/routes/ZeroShotClassificationReachability'
 
 export default function App() {
   return (
@@ -34,6 +36,10 @@ export default function App() {
         <Route path={DSPARK_PATH} element={<DsparkTrainingCostCalculator />} />
         <Route path={INFERENCE_PATH} element={<InferenceGpuCalculator />} />
         <Route path={CONTEXT_COMPRESSION_PATH} element={<ContextCompressionCalculator />} />
+        <Route
+          path={ZERO_SHOT_REACHABILITY_PATH}
+          element={<ZeroShotClassificationReachability />}
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </SiteLayout>
