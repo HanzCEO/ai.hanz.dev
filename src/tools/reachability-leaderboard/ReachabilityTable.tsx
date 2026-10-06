@@ -136,7 +136,10 @@ export default function ReachabilityTable({
               const expanded = open.has(row.model.engine)
               return (
                 <Fragment key={row.model.engine}>
-                  <tr className="border-border border-b align-top">
+                  <tr
+                    data-engine={row.model.engine}
+                    className="border-border border-b align-top"
+                  >
                     <td className="text-muted-foreground py-3 pr-3 tabular-nums">{index + 1}</td>
                     <td className="py-3 pr-3">
                       <div className="font-medium">{row.model.name}</div>
@@ -168,7 +171,9 @@ export default function ReachabilityTable({
                         type="button"
                         className="text-primary underline-offset-4 hover:underline"
                         aria-expanded={expanded}
-                        aria-controls={`reachability-detail-${row.model.engine}`}
+                        aria-controls={
+                          expanded ? `reachability-detail-${row.model.engine}` : undefined
+                        }
                         onClick={() => toggle(row.model.engine)}
                       >
                         {expanded ? 'Hide' : 'Details'}
@@ -176,11 +181,12 @@ export default function ReachabilityTable({
                     </td>
                   </tr>
                   {expanded && (
-                    <tr className="border-border border-b">
+                    <tr
+                      id={`reachability-detail-${row.model.engine}`}
+                      className="border-border border-b"
+                    >
                       <td colSpan={8} className="bg-muted/30 p-0">
-                        <div id={`reachability-detail-${row.model.engine}`}>
-                          <ReachabilityBreakdown row={row} />
-                        </div>
+                        <ReachabilityBreakdown row={row} />
                       </td>
                     </tr>
                   )}
