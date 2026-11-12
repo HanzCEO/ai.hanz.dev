@@ -61,6 +61,8 @@ interface ModelIdFieldProps {
   idleHint?: string
   /** Copy for the error status. */
   errorHint?: string
+  /** Copy for the loading status. Defaults to "Reading the config". */
+  loadingHint?: string
   /** Copy for the not-moe status, for tools that only apply to some models. */
   notMoeHint?: string
   /** Suggestions rendered into a datalist, which also enables autocomplete. */
@@ -79,6 +81,7 @@ export function ModelIdField({
   label = 'Model id',
   idleHint = 'Type a model id, or pick a suggestion.',
   errorHint = 'Could not read that config.',
+  loadingHint = 'Reading the config',
   notMoeHint,
   presets,
   listId,
@@ -113,7 +116,7 @@ export function ModelIdField({
         {status === 'loading' && (
           <>
             <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-            Reading the config
+            {loadingHint}
           </>
         )}
         {status === 'idle' && idleHint}

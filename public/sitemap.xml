@@ -25,6 +25,10 @@
     <changefreq>monthly</changefreq>
   </url>
   <url>
+    <loc>https://ai.hanz.dev/tools/token-size-calculator/</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
     <loc>https://ai.hanz.dev/tools/zero-shot-classification-reachability-leaderboard/</loc>
     <changefreq>monthly</changefreq>
   </url>

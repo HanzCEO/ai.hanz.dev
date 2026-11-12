@@ -1,4 +1,4 @@
-import { Calculator, Cpu, Scissors, Sparkles, TrendingDown, Trophy, type LucideIcon } from 'lucide-react'
+import { Calculator, Cpu, Ruler, Scissors, Sparkles, TrendingDown, Trophy, type LucideIcon } from 'lucide-react'
 
 export type ToolStatus = 'ready' | 'planned'
 
@@ -54,6 +54,14 @@ export const tools: Tool[] = [
     description:
       'Finds the session size at which summarising it starts to pay off, and the widest summary cap that still beats carrying the session.',
     icon: TrendingDown,
+    status: 'ready',
+  },
+  {
+    slug: 'token-size-calculator',
+    name: 'Token Size Calculator',
+    description:
+      'Turns a token count into bytes, KB, MB, GB, TB, and PB using the model\u2019s own tokenizer, read from HuggingFace or ModelScope.',
+    icon: Ruler,
     status: 'ready',
   },
   {

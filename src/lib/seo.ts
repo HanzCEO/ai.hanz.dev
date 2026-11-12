@@ -2,6 +2,7 @@ import { REAP_FAQ } from './reap/faq'
 import { DSPARK_FAQ } from './dspark/faq'
 import { INFERENCE_FAQ } from './inference/faq'
 import { COMPRESSION_FAQ } from './compression/faq'
+import { TOKEN_SIZE_FAQ } from './token-size/faq'
 import { REACHABILITY_FAQ } from './reachability/faq'
 import type { FaqItem } from './faq'
 
@@ -42,6 +43,7 @@ export const REAP_PATH = '/tools/cost-to-reap-calculator/'
 export const DSPARK_PATH = '/tools/dspark-training-cost-calculator/'
 export const INFERENCE_PATH = '/tools/inference-gpu-calculator/'
 export const CONTEXT_COMPRESSION_PATH = '/tools/context-compression-calculator/'
+export const TOKEN_SIZE_PATH = '/tools/token-size-calculator/'
 export const ZERO_SHOT_REACHABILITY_PATH =
   '/tools/zero-shot-classification-reachability-leaderboard/'
 
@@ -60,6 +62,10 @@ const INFERENCE_DESCRIPTION =
 const COMPRESSION_TITLE = 'Context Compression Calculator | ai.hanz.dev'
 const COMPRESSION_DESCRIPTION =
   'Find the session size at which summarising it starts to pay off, and the widest summary cap that still beats carrying the session.'
+
+const TOKEN_SIZE_TITLE = 'Token Size Calculator: how many GB is a token count? | ai.hanz.dev'
+const TOKEN_SIZE_DESCRIPTION =
+  'Turn a token count into bytes, KB, MB, GB, TB, and PB using a model\u2019s own tokenizer. Type any org/name and read the ratio from HuggingFace or ModelScope.'
 
 const REACHABILITY_TITLE = 'Zero-Shot Classification Reachability Leaderboard | ai.hanz.dev'
 const REACHABILITY_DESCRIPTION =
@@ -130,6 +136,19 @@ export const ROUTE_META: RouteMeta[] = [
         description: COMPRESSION_DESCRIPTION,
       }),
       faqJsonLd(COMPRESSION_FAQ),
+    ),
+  },
+  {
+    path: TOKEN_SIZE_PATH,
+    title: TOKEN_SIZE_TITLE,
+    description: TOKEN_SIZE_DESCRIPTION,
+    jsonLd: jsonLdGraph(
+      softwareApplicationJsonLd({
+        path: TOKEN_SIZE_PATH,
+        title: TOKEN_SIZE_TITLE,
+        description: TOKEN_SIZE_DESCRIPTION,
+      }),
+      faqJsonLd(TOKEN_SIZE_FAQ),
     ),
   },
   {
