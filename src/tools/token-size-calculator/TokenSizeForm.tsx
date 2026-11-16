@@ -5,9 +5,11 @@ import {
 } from '@/components/model-source/ModelSourceFields'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import SegmentedControl from '@/components/ui/segmented'
 import {
   formatTokenAmountShort,
   parseTokenAmount,
+  STORAGE_FORMATS,
   TOKENIZER_FAMILY_LABELS,
   TOKENIZER_PRESETS,
   type TokenizerError,
@@ -120,10 +122,18 @@ export default function TokenSizeForm({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              The number of tokens to price in bytes, for the model above.
+              The number of tokens to size in the file format below, for the model above.
             </p>
           )}
         </div>
+
+        <SegmentedControl
+          legend="File storage format"
+          options={STORAGE_FORMATS}
+          value={inputs.storage}
+          onValueChange={(storage) => update({ storage })}
+          wrap
+        />
       </fieldset>
     </form>
   )

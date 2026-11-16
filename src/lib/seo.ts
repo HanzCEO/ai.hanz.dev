@@ -65,7 +65,7 @@ const COMPRESSION_DESCRIPTION =
 
 const TOKEN_SIZE_TITLE = 'Token Size Calculator: how many GB is a token count? | ai.hanz.dev'
 const TOKEN_SIZE_DESCRIPTION =
-  'Turn a token count into bytes, KB, MB, GB, TB, and PB using a model\u2019s own tokenizer. Type any org/name and read the ratio from HuggingFace or ModelScope.'
+  'Turn a token count into bytes, KB, MB, GB, TB, and PB using a model\u2019s own tokenizer. Type any org/name and read the ratio from HuggingFace or ModelScope, then size the same tokens as text, JSONL, Parquet, or Arrow.'
 
 const REACHABILITY_TITLE = 'Zero-Shot Classification Reachability Leaderboard | ai.hanz.dev'
 const REACHABILITY_DESCRIPTION =

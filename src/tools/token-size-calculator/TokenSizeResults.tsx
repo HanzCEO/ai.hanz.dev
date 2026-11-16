@@ -4,9 +4,14 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import {
+  bytesPerTokenForStorage,
   estimateTokenSize,
   formatTokenAmountShort,
+  getStorageFormat,
+  storageNote,
+  tokenIdWidth,
   TOKENIZER_FAMILY_LABELS,
+  type StorageFormatId,
   type TokenizerError,
   type TokenizerProfile,
 } from '@/lib/token-size'
@@ -18,17 +23,7 @@ interface TokenSizeResultsProps {
   url: string | null
   error: TokenizerError | null
   tokensValue: number | null
-}
-
-/** The methodology sentence, specific to how the profile was derived. */
-function methodology(profile: TokenizerProfile): string {
-  if (profile.corpusTokens !== null && profile.corpusBytes !== null) {
-    return `The tokenizer split the bundled sample corpus of ${profile.corpusBytes.toLocaleString('en-US')} bytes into ${profile.corpusTokens.toLocaleString('en-US')} tokens, which puts one token at ${profile.bytesPerToken.toFixed(3)} bytes.`
-  }
-  if (profile.family === 'unigram') {
-    return `A unigram tokenizer has no merges to replay, so the figure is the expected byte length of a token under the tokenizer\u2019s own score distribution.`
-  }
-  return `The tokenizer has no merge ranks, so the figure is the mean decoded byte length of the tokens in its vocabulary, which is an estimate.`
+  storage: StorageFormatId
 }
 
 /** A URL shortened to what fits in a footnote. */
@@ -42,6 +37,7 @@ export default function TokenSizeResults({
   url,
   error,
   tokensValue,
+  storage,
 }: TokenSizeResultsProps) {
   if (status === 'idle') {
     return (
@@ -83,7 +79,9 @@ export default function TokenSizeResults({
     )
   }
 
-  const result = estimateTokenSize(tokensValue, profile.bytesPerToken)
+  const format = getStorageFormat(storage)
+  const bytesPerToken = bytesPerTokenForStorage(storage, profile)
+  const result = estimateTokenSize(tokensValue, bytesPerToken)
 
   return (
     <div className="flex min-w-0 flex-col gap-6" aria-live="polite">
@@ -92,7 +90,8 @@ export default function TokenSizeResults({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-muted-foreground text-xs tracking-wide uppercase">
-                {formatTokenAmountShort(tokensValue)} tokens, using {TOKENIZER_FAMILY_LABELS[profile.family]}
+                {formatTokenAmountShort(tokensValue)} tokens as {format.label}, using{' '}
+                {TOKENIZER_FAMILY_LABELS[profile.family]}
               </p>
               <p
                 className="mt-1 text-4xl font-medium tracking-tight tabular-nums"
@@ -102,11 +101,11 @@ export default function TokenSizeResults({
               </p>
             </div>
             <Badge variant="secondary" className="tabular-nums">
-              {profile.bytesPerToken.toFixed(3)} bytes per token
+              {bytesPerToken.toFixed(3)} bytes per token
             </Badge>
           </div>
 
-          <p className="text-sm">{methodology(profile)}</p>
+          <p className="text-sm">{storageNote(storage, profile)}</p>
 
           <p className="text-muted-foreground text-sm">
             Counted in binary that is <span className="tabular-nums">{result.binary}</span> (1 KiB =
@@ -147,11 +146,15 @@ export default function TokenSizeResults({
         className="flex flex-col gap-3"
       >
         <h2 id="token-size-details-heading" className="text-lg font-medium tracking-tight">
-          The tokenizer this used
+          The tokenizer and format behind this figure
         </h2>
         <Card>
           <CardContent className="flex flex-col gap-4">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+              <div className="flex flex-col">
+                <dt className="text-muted-foreground text-xs">Format</dt>
+                <dd>{format.label}</dd>
+              </div>
               <div className="flex flex-col">
                 <dt className="text-muted-foreground text-xs">Family</dt>
                 <dd>{TOKENIZER_FAMILY_LABELS[profile.family]}</dd>
@@ -162,15 +165,36 @@ export default function TokenSizeResults({
               </div>
               <div className="flex flex-col">
                 <dt className="text-muted-foreground text-xs">Bytes per token</dt>
-                <dd className="tabular-nums">{profile.bytesPerToken.toFixed(3)}</dd>
+                <dd className="tabular-nums">{bytesPerToken.toFixed(3)}</dd>
               </div>
+              {storage !== 'text' && (
+                <>
+                  <div className="flex flex-col">
+                    <dt className="text-muted-foreground text-xs">Text bytes per token</dt>
+                    <dd className="tabular-nums">{profile.bytesPerToken.toFixed(3)}</dd>
+                  </div>
+                  <div className="flex flex-col">
+                    <dt className="text-muted-foreground text-xs">Token id width</dt>
+                    <dd className="tabular-nums">{tokenIdWidth(profile.vocabSize) * 8} bit</dd>
+                  </div>
+                </>
+              )}
             </dl>
 
-            <p className="text-muted-foreground text-sm">
-              {profile.estimated
-                ? 'This family has no merge ranks to replay, so the figure is a vocabulary average rather than a measurement; treat the answer as a rough guide.'
-                : 'The figure is measured against a fixed sample corpus, so it is exact for that text and a fair basis for comparing this model with any other on this page.'}
-            </p>
+            {storage === 'text' && (
+              <p className="text-muted-foreground text-sm">
+                {profile.estimated
+                  ? 'This family has no merge ranks to replay, so the figure is a vocabulary average rather than a measurement; treat the answer as a rough guide.'
+                  : 'The figure is measured against a fixed sample corpus, so it is exact for that text and a fair basis for comparing this model with any other on this page.'}
+              </p>
+            )}
+            {storage === 'parquet' && (
+              <p className="text-muted-foreground text-sm">
+                A Parquet file's size depends on how well its encoder compresses a column of
+                adjacent token ids, so this figure is a rule of thumb. The Arrow figure is the
+                uncompressed id width.
+              </p>
+            )}
           </CardContent>
         </Card>
       </section>

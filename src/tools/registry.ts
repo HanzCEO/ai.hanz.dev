@@ -60,7 +60,7 @@ export const tools: Tool[] = [
     slug: 'token-size-calculator',
     name: 'Token Size Calculator',
     description:
-      'Turns a token count into bytes, KB, MB, GB, TB, and PB using the model\u2019s own tokenizer, read from HuggingFace or ModelScope.',
+      'Turns a token count into bytes, KB, MB, GB, TB, and PB using the model\u2019s own tokenizer, read from HuggingFace or ModelScope, and sizes the same tokens as text, JSONL, Parquet, or Arrow.',
     icon: Ruler,
     status: 'ready',
   },

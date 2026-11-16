@@ -47,6 +47,17 @@ export interface SizeLine {
   text: string
 }
 
+/** The file formats a token count can be stored in. */
+export type StorageFormatId = 'text' | 'jsonl' | 'parquet' | 'arrow'
+
+/** One storage format as the picker presents it. */
+export interface StorageFormatSpec {
+  id: StorageFormatId
+  label: string
+  /** Shown under the picker while this format is selected. */
+  hint: string
+}
+
 /** The answer: a token count priced in bytes, then scaled into every unit. */
 export interface TokenSizeResult {
   tokens: number

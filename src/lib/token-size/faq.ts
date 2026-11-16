@@ -9,7 +9,7 @@ export const TOKEN_SIZE_FAQ: FaqItem[] = [
   {
     question: 'What does this calculator answer?',
     answer:
-      'It turns a token count into a byte count for one specific tokenizer. You pick a model, type its org/name, and choose how many tokens you are interested in, and the page reports that many tokens as bytes, KB, MB, GB, TB, and PB — the number a dataset download, a stored prompt buffer, or a pricing bill is actually measured in.',
+      'It turns a token count into a byte count for one specific tokenizer. You pick a model, type its org/name, choose how many tokens you are interested in, and choose whether those tokens are stored as text, JSONL, Parquet, or Arrow. The page then reports that many tokens as bytes, KB, MB, GB, TB, and PB — the number a dataset download, a stored prompt buffer, or a pricing bill is actually measured in.',
   },
   {
     question: 'Why does the answer depend on the model?',
@@ -35,6 +35,16 @@ export const TOKEN_SIZE_FAQ: FaqItem[] = [
     question: 'Are these GB or GiB?',
     answer:
       'The table uses decimal units — one GB is 1,000,000,000 bytes — which is how storage and API billing usually quote sizes. The headline also prints the same byte count in binary units, which is how memory is usually quoted, alongside the exact byte count, so neither reading is lost.',
+  },
+  {
+    question: 'Why does the file format change the answer so much?',
+    answer:
+      'Text and token ids are different things. The text reading counts the UTF-8 bytes the tokenizer was measured on, which is what a download of raw text costs. A tokenized file stores token ids instead, so its size follows the vocabulary width rather than the language: a vocabulary of 65,536 ids or fewer fits each token in two bytes, and a larger one needs four. Arrow keeps those bytes uncompressed, Parquet compresses the column and usually lands near 60% of the raw width, and JSONL writes each id as decimal text with a comma between, so its size depends on how many digits the ids take.',
+  },
+  {
+    question: 'Which storage format should I pick?',
+    answer:
+      'Pick Text when you are sizing the corpus the tokens were produced from, for example a dataset you would download before tokenizing. Pick Parquet or Arrow when you keep a pre-tokenized dataset, since streaming token ids off disk is how training pipelines avoid the tokenizer at step time. Parquet is the usual choice because it is compact and readable from most tools; Arrow is uncompressed and memory-mappable, which is why it is quoted as the exact width.',
   },
   {
     question: 'Why does some models\u2019 tab say it needs a token?',

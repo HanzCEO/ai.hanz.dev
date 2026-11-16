@@ -17,7 +17,7 @@ export default function TokenSizeCalculator() {
 
       <ToolHeader
         title="How many GB is a token count?"
-        description="Type a model's org/name and a token count, and the page sizes that many tokens in bytes, KB, MB, GB, TB, and PB — measured with the model's own tokenizer, read from HuggingFace or ModelScope."
+        description="Type a model's org/name and a token count, pick whether the tokens are stored as text, JSONL, Parquet, or Arrow, and the page sizes that many tokens in bytes, KB, MB, GB, TB, and PB — measured with the model's own tokenizer, read from HuggingFace or ModelScope."
         widthClass="max-w-2xl"
       />
 
@@ -36,6 +36,7 @@ export default function TokenSizeCalculator() {
           url={tokenizer.url}
           error={tokenizer.error}
           tokensValue={tokensValue}
+          storage={inputs.storage}
         />
       </div>
 
@@ -56,6 +57,12 @@ export default function TokenSizeCalculator() {
           split it — the same pretokenizer, the same merge ranks. Because the sample never changes,
           models on this page are compared on equal terms, and a bookmark of a size you computed
           can be reloaded and re-counted identically.
+        </p>
+        <p className="mt-2">
+          The text reading is that measurement. The tokenized formats price the ids instead: two
+          bytes each for a vocabulary of 65,536 or fewer, four bytes each above that, before any
+          compression. Arrow stores those ids raw, Parquet compresses the column, and JSONL writes
+          them as decimal text, so the same token count has a different size in each file.
         </p>
       </section>
 

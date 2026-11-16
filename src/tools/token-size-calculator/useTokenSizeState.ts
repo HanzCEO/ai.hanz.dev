@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
 import type { Provider } from '@/lib/kvcache'
-import { parseTokenAmount } from '@/lib/token-size'
+import { parseTokenAmount, STORAGE_FORMAT_ORDER, type StorageFormatId } from '@/lib/token-size'
 import { enumOf, nonEmptyText, useUrlSyncedState, type UrlSchema } from '@/lib/url-state'
 
 /**
@@ -9,8 +9,8 @@ import { enumOf, nonEmptyText, useUrlSyncedState, type UrlSchema } from '@/lib/u
  *
  * The provider and model id mirror the shared model source fields, but this
  * page reads a tokenizer.json rather than a config.json, so it does not offer
- * the paste or manual modes the size calculators need. Only the token count and
- * an optional hub token are this page's own.
+ * the paste or manual modes the size calculators need. The token count, the
+ * file format it is stored in, and an optional hub token are this page's own.
  */
 export interface TokenSizeInputs {
   provider: Provider
@@ -19,6 +19,8 @@ export interface TokenSizeInputs {
   token: string
   /** Kept as text so the field can be emptied while typing. */
   tokens: string
+  /** The file format the tokens are stored in. */
+  storage: StorageFormatId
 }
 
 export const DEFAULT_TOKEN_SIZE_MODEL = 'Qwen/Qwen3-8B'
@@ -44,6 +46,7 @@ export const TOKEN_SIZE_SCHEMA: UrlSchema<TokenSizeInputs> = {
   modelId: { param: 'model', default: DEFAULT_TOKEN_SIZE_MODEL, parse: nonEmptyText },
   token: { param: 'token', default: '', parse: () => null, omit: true },
   tokens: { param: 'tokens', default: DEFAULT_TOKEN_AMOUNT, parse: tokenAmountText },
+  storage: { param: 'format', default: 'text', parse: enumOf(STORAGE_FORMAT_ORDER) },
 }
 
 export function useTokenSizeState() {

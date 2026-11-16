@@ -63,6 +63,13 @@ describe('TokenSizeCalculator at the first paint', () => {
     }
   })
 
+  it('offers a file storage format beside the token amount', () => {
+    expect(html).toContain('File storage format')
+    for (const label of ['Text', 'JSONL', 'Parquet', 'Arrow']) {
+      expect(html).toContain(label)
+    }
+  })
+
   it('reads the default token count of a billion tokens', () => {
     expect(html).toContain('value="1000000000"')
   })
@@ -93,12 +100,18 @@ describe('TokenSizeCalculator at the first paint', () => {
 })
 
 describe('TokenSizeResults states', () => {
+  /** React separates adjacent text nodes with comments, which would split a phrase. */
+  function stripComments(markup: string): string {
+    return markup.replace(/<!-- -->/g, '')
+  }
+
   function renderResults(patch: Partial<{
     status: 'idle' | 'loading' | 'ready' | 'error'
     profile: unknown
     url: string | null
     error: unknown
     tokensValue: number | null
+    storage: 'text' | 'jsonl' | 'parquet' | 'arrow'
   }>): string {
     return renderToString(
       createElement(TokenSizeResults, {
@@ -107,11 +120,25 @@ describe('TokenSizeResults states', () => {
         url: null,
         error: null,
         tokensValue: null,
+        storage: 'text',
         ...patch,
         // The props are typed through the concrete component, so patches that
         // are not valid never compile.
       } as Parameters<typeof TokenSizeResults>[0]),
     )
+  }
+
+  const ready = {
+    status: 'ready' as const,
+    profile: {
+      family: 'byte_level_bpe' as const,
+      vocabSize: 32_000,
+      corpusTokens: 1_000,
+      corpusBytes: 4_000,
+      bytesPerToken: 4,
+      estimated: false,
+    },
+    tokensValue: 1_000_000_000,
   }
 
   it('shows the idle hint before the tokenizer resolves', () => {
@@ -125,6 +152,31 @@ describe('TokenSizeResults states', () => {
       tokensValue: null,
     })
     expect(rejected).toContain('The token count is not readable')
+  })
+
+  it('sizes the text reading by the tokenizer measurement', () => {
+    const text = stripComments(renderResults({ ...ready, storage: 'text' }))
+    expect(text).toContain('1B tokens as Text')
+    expect(text).toContain('4 GB')
+  })
+
+  it('re-sizes the same tokens for a tokenized file format', () => {
+    // A 32K vocabulary writes two byte ids, so Arrow stores 2 GB where the
+    // text reading costs 4 GB, and Parquet is estimated at 60% of that.
+    const arrow = stripComments(renderResults({ ...ready, storage: 'arrow' }))
+    expect(arrow).toContain('1B tokens as Arrow')
+    expect(arrow).toContain('2 GB')
+
+    const parquet = stripComments(renderResults({ ...ready, storage: 'parquet' }))
+    expect(parquet).toContain('1B tokens as Parquet')
+    expect(parquet).toContain('1.2 GB')
+  })
+
+  it('leaves the tokenizer measurement visible beside the stored width', () => {
+    const arrow = renderResults({ ...ready, storage: 'arrow' })
+    expect(arrow).toContain('Text bytes per token')
+    expect(arrow).toContain('Token id width')
+    expect(arrow).toContain('unsigned 16-bit')
   })
 })
 

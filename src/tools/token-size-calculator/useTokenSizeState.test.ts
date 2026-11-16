@@ -2,16 +2,17 @@ import { describe, expect, it } from 'vitest'
 
 import { defaultsFromSchema, serializeState } from '@/lib/url-state'
 
-import { DEFAULT_TOKEN_SIZE_MODEL, TOKEN_SIZE_SCHEMA } from './useTokenSizeState'
+import { DEFAULT_TOKEN_SIZE_MODEL, TOKEN_SIZE_SCHEMA, type TokenSizeInputs } from './useTokenSizeState'
 
 describe('TOKEN_SIZE_SCHEMA defaults', () => {
-  it('opens on HuggingFace with Qwen3 and a billion tokens', () => {
+  it('opens on HuggingFace with Qwen3, a billion tokens, and text storage', () => {
     const defaults = defaultsFromSchema(TOKEN_SIZE_SCHEMA)
 
     expect(defaults.provider).toBe('huggingface')
     expect(defaults.modelId).toBe(DEFAULT_TOKEN_SIZE_MODEL)
     expect(defaults.token).toBe('')
     expect(defaults.tokens).toBe('1000000000')
+    expect(defaults.storage).toBe('text')
   })
 
   it('serializes nothing when every field is at its default', () => {
@@ -34,6 +35,18 @@ describe('TOKEN_SIZE_SCHEMA URL reading', () => {
   it('reads only the providers the page offers', () => {
     expect(TOKEN_SIZE_SCHEMA.provider.parse('modelscope')).toBe('modelscope')
     expect(TOKEN_SIZE_SCHEMA.provider.parse('replicate')).toBeNull()
+  })
+
+  it('reads only the storage formats the page offers', () => {
+    expect(TOKEN_SIZE_SCHEMA.storage.parse('parquet')).toBe('parquet')
+    expect(TOKEN_SIZE_SCHEMA.storage.parse('arrow')).toBe('arrow')
+    expect(TOKEN_SIZE_SCHEMA.storage.parse('hdf5')).toBeNull()
+  })
+
+  it('writes a non-default storage format beside the token count', () => {
+    const defaults = defaultsFromSchema(TOKEN_SIZE_SCHEMA)
+    const parquet: TokenSizeInputs = { ...defaults, storage: 'parquet' }
+    expect(serializeState(TOKEN_SIZE_SCHEMA, parquet)).toBe('format=parquet')
   })
 
   it('never writes the hub token to the URL', () => {
